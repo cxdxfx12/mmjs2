@@ -5,11 +5,22 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
 
 var DB *sql.DB
+
+// writeMu 全局写锁，SQLite并发写入会报SQLITE_BUSY，串行写入避免锁冲突
+var writeMu sync.Mutex
+
+// WriteExec 串行执行写操作，避免SQLITE_BUSY
+func WriteExec(query string, args ...interface{}) (sql.Result, error) {
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	return DB.Exec(query, args...)
+}
 
 func GetDataDir() string {
 	if envDir := os.Getenv("YUNFEI_DATA_DIR"); envDir != "" {
@@ -30,7 +41,7 @@ func GetDataDir() string {
 func Init() error {
 	dbPath := filepath.Join(GetDataDir(), "yunfei.db")
 	var err error
-	DB, err = sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+	DB, err = sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=30000")
 	if err != nil {
 		return err
 	}

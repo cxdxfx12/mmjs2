@@ -771,7 +771,7 @@ func main() {
 
 				// 保存历史记录
 				ruleSummary := fmt.Sprintf("%d条规则", len(allRules))
-				if _, err := db.DB.Exec(`INSERT INTO calc_history (input_file, total_count, total_fee, avg_fee, max_fee, min_fee, rule_summary, calc_duration)
+				if _, err := db.WriteExec(`INSERT INTO calc_history (input_file, total_count, total_fee, avg_fee, max_fee, min_fee, rule_summary, calc_duration)
 					VALUES (?,?,?,?,?,?,?,?)`,
 					t.FileName, summary.TotalCount, summary.TotalFee, summary.AvgFee, summary.MaxFee, summary.MinFee, ruleSummary, duration); err != nil {
 					println("[WARN] 批量保存计算历史失败:", err.Error())

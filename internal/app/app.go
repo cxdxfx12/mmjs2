@@ -571,7 +571,7 @@ func (a *App) doCalc(rowData []excel.RowData, progress ProgressFn, inputFile str
 	ruleSummary := fmt.Sprintf("%d条规则", len(allRules))
 	// 取文件名（不含路径）
 	fileName := filepath.Base(inputFile)
-	_, err = db.DB.Exec(`INSERT INTO calc_history (input_file, total_count, total_fee, avg_fee, max_fee, min_fee, rule_summary, calc_duration)
+	_, err = db.WriteExec(`INSERT INTO calc_history (input_file, total_count, total_fee, avg_fee, max_fee, min_fee, rule_summary, calc_duration)
 		VALUES (?,?,?,?,?,?,?,?)`,
 		fileName, summary.TotalCount, summary.TotalFee, summary.AvgFee, summary.MaxFee, summary.MinFee, ruleSummary, duration)
 	if err != nil {
@@ -590,7 +590,7 @@ func (a *App) ExportResult(data []excel.RowData, outputPath string, summary *exc
 	if err != nil {
 		return "导出失败: " + err.Error()
 	}
-	db.DB.Exec("UPDATE calc_history SET output_file=? WHERE id=(SELECT MAX(id) FROM calc_history)", outputPath)
+	db.WriteExec("UPDATE calc_history SET output_file=? WHERE id=(SELECT MAX(id) FROM calc_history)", outputPath)
 	return "ok"
 }
 
