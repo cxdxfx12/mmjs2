@@ -1,0 +1,78 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f0f2f5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root {
+  --primary: #4472C4;
+  --primary-dark: #2d2854;
+  --primary-light: #6b90d6;
+  --success: #67c23a;
+  --warning: #e6a23c;
+  --danger: #f56c6c;
+  --text-primary: #303133;
+  --text-regular: #606266;
+  --text-secondary: #909399;
+  --text-placeholder: #c0c4cc;
+  --border-color: #e4e7ed;
+  --bg-color: #f0f2f5;
+}
+
+/* 全局滚动条 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: #c0c4cc; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #909399; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* 卡片基础样式 */
+.el-card {
+  border-radius: 12px !important;
+  border: none !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05) !important;
+  transition: box-shadow 0.3s;
+}
+.el-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important; }
+
+/* 表格样式 */
+.el-table {
+  border-radius: 10px;
+}
+
+/* 按钮圆润 */
+.el-button--primary {
+  background: linear-gradient(135deg, #4472C4, #2d2854) !important;
+  border: none !important;
+}
+.el-button--primary:hover { opacity: 0.9; }
+
+.el-button--success {
+  background: linear-gradient(135deg, #67c23a, #85ce61) !important;
+  border: none !important;
+}
+
+/* 标签 */
+.el-tag { border-radius: 6px !important; }
+
+/* 分页 */
+.el-pagination { margin-top: 16px; justify-content: center; }
+
+/* 进度条 */
+.el-progress-bar__outer { border-radius: 10px !important; }
+.el-progress-bar__inner { border-radius: 10px !important; }
+
+/* Alert */
+.el-alert { border-radius: 10px !important; }
+
+/* Menu */
+.el-menu-item.is-active { border-radius: 8px !important; }
+
+/* Steps */
+.el-steps { margin-bottom: 24px; }

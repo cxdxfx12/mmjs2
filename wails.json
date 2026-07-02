@@ -1,0 +1,13 @@
+{
+  "name": "yunfei",
+  "outputfilename": "yunfei",
+  "icon": "monkey.ico",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "http://localhost:5173",
+  "author": {
+    "name": "喵喵云结算",
+    "email": ""
+  }
+}
