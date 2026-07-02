@@ -23,6 +23,32 @@ func GetAvgWeightRules() ([]AvgWeightRule, error) {
 	return list, nil
 }
 
+// LoadAllAvgWeightRules 预加载所有拉均重规则（批量计算性能优化）
+// 返回: 客户级规则map(客户名->规则), 全局规则(可能为nil)
+func LoadAllAvgWeightRules() (map[string]*AvgWeightRule, *AvgWeightRule) {
+	rows, err := db.DB.Query(`SELECT id, scope_type, customer_name, base_weight, 
+		weight_limit, step_weight, step_price, max_markup, round_mode, is_enabled, remark
+		FROM avg_weight_rules`)
+	if err != nil {
+		return nil, nil
+	}
+	defer rows.Close()
+
+	customerRules := make(map[string]*AvgWeightRule)
+	var globalRule *AvgWeightRule
+	for rows.Next() {
+		var r AvgWeightRule
+		rows.Scan(&r.ID, &r.ScopeType, &r.CustomerName, &r.BaseWeight,
+			&r.WeightLimit, &r.StepWeight, &r.StepPrice, &r.MaxMarkup, &r.RoundMode, &r.IsEnabled, &r.Remark)
+		if r.ScopeType == "customer" && r.CustomerName != "" {
+			customerRules[r.CustomerName] = &r
+		} else if r.ScopeType == "global" {
+			globalRule = &r
+		}
+	}
+	return customerRules, globalRule
+}
+
 // GetAvgWeightRuleByCustomer 获取客户的拉均重规则（优先客户级，再找全局，都没有返回nil）
 func GetAvgWeightRuleByCustomer(customer string) *AvgWeightRule {
 	var r AvgWeightRule
@@ -89,6 +115,6 @@ func InitDefaultAvgWeightRule() error {
 	}
 	_, err := db.DB.Exec(`INSERT INTO avg_weight_rules 
 		(scope_type, customer_name, base_weight, weight_limit, step_weight, step_price, max_markup, round_mode, is_enabled, remark)
-		VALUES ('global', '', 0.3, 3, 0.1, 0.1, 0, 'ceil', 0, '系统默认拉均重规则（默认关闭）')`)
+		VALUES ('global', '', 0.5, 1, 0.1, 0.1, 0, 'ceil', 0, '系统默认拉均重规则（默认关闭）')`)
 	return err
 }

@@ -30,18 +30,25 @@ func CalcSingle(weight float64, customer, province string, allRules []rules.Frei
 // CalcSingleWithIndex 基于预建索引计算单笔运费（O(1)规则查找，批量计算用）
 func CalcSingleWithIndex(weight float64, customer, province string, idx *rules.RuleIndex, gr *rules.GlobalRule, bracketMap map[int64][]rules.WeightBracket) (float64, float64, float64, float64, *rules.RuleResult) {
 	best := idx.Find(customer, province)
-	return doCalcSingle(weight, province, best, gr, bracketMap)
+	return doCalcSingle(weight, province, best, gr, bracketMap, nil)
+}
+
+// CalcSingleWithIndexFast 基于预建索引+预加载省份加价map计算（批量计算最快路径）
+func CalcSingleWithIndexFast(weight float64, customer, province string, idx *rules.RuleIndex, gr *rules.GlobalRule, bracketMap map[int64][]rules.WeightBracket, provSurchargeMap map[string]float64) (float64, float64, float64, float64, *rules.RuleResult) {
+	best := idx.Find(customer, province)
+	return doCalcSingle(weight, province, best, gr, bracketMap, provSurchargeMap)
 }
 
 // CalcSingleWithGlobal 计算单笔运费（支持全局保底和加价规则）
 func CalcSingleWithGlobal(weight float64, customer, province string, allRules []rules.FreightRule, gr *rules.GlobalRule) (float64, float64, float64, float64, *rules.RuleResult) {
 	best := rules.FindBestRule(customer, province, allRules)
-	return doCalcSingle(weight, province, best, gr, nil)
+	return doCalcSingle(weight, province, best, gr, nil, nil)
 }
 
 // doCalcSingle 核心计算逻辑（共享实现）
 // bracketMap: 规则ID -> 重量区间列表（批量计算时预加载，可为nil）
-func doCalcSingle(weight float64, province string, best *rules.RuleResult, gr *rules.GlobalRule, bracketMap map[int64][]rules.WeightBracket) (float64, float64, float64, float64, *rules.RuleResult) {
+// provSurchargeMap: 省份 -> 加价金额（批量计算时预加载，可为nil，nil时走数据库查询）
+func doCalcSingle(weight float64, province string, best *rules.RuleResult, gr *rules.GlobalRule, bracketMap map[int64][]rules.WeightBracket, provSurchargeMap map[string]float64) (float64, float64, float64, float64, *rules.RuleResult) {
 	billWeight := math.Max(weight, 0.01)
 
 	var r rules.FreightRule
@@ -65,10 +72,21 @@ func doCalcSingle(weight float64, province string, best *rules.RuleResult, gr *r
 		return 5.0, 0, 0, 5.0, nil
 	}
 
+	// 获取省份加价（优先用预加载map，找不到再查数据库）
+	getProvSurcharge := func(p string) float64 {
+		if provSurchargeMap != nil {
+			if v, ok := provSurchargeMap[p]; ok {
+				return v
+			}
+			return 0
+		}
+		return rules.GetProvinceSurcharge(p)
+	}
+
 	// 零重量保护：重量为正但极小时用 no_weight_price
 	if weight <= 0 && gr != nil && gr.NoWeightPrice > 0 {
 		baseFee := gr.NoWeightPrice
-		baseFee += rules.GetProvinceSurcharge(province)
+		baseFee += getProvSurcharge(province)
 		finalFee, rawFee, markup := ApplyGlobalMarkup(baseFee, gr)
 		return finalFee, rawFee, markup, baseFee, best
 	}
@@ -95,7 +113,7 @@ func doCalcSingle(weight float64, province string, best *rules.RuleResult, gr *r
 	fee += r.Surcharge
 
 	// 全局省份加价（按目的省份每票加收）
-	fee += rules.GetProvinceSurcharge(province)
+	fee += getProvSurcharge(province)
 
 	// 最低/最高限制（保底价优先于全局 min_fee）
 	if r.MinFee > 0 && fee < r.MinFee {

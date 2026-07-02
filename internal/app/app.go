@@ -287,10 +287,11 @@ func (a *App) ImportCustomerRules(records [][]string) (int, string) {
 			}
 		}
 
-		var province, calcMode, contMode, ruleType, remark string
+		var province, calcMode, contMode, ruleType, remark, zoneName string
 		var firstWeight, firstPrice, contPrice, minFee, maxFee, surcharge float64
 		isEnabled := 1
 		var brackets []rules.WeightBracket
+		var zoneID int64
 
 		if isNewFormat {
 			province = getCol(row, 1)
@@ -308,6 +309,7 @@ func (a *App) ImportCustomerRules(records [][]string) (int, string) {
 			minFee = parseFloat(getCol(row, 7), 0)
 			maxFee = parseFloat(getCol(row, 8), 0)
 			surcharge = parseFloat(getCol(row, 9), 0)
+			zoneName = getCol(row, 10)
 			ruleType = getCol(row, 11)
 			if ruleType == "" {
 				ruleType = "customer"
@@ -323,12 +325,12 @@ func (a *App) ImportCustomerRules(records [][]string) (int, string) {
 
 			if calcMode == "bracket" {
 				brackets = []rules.WeightBracket{
-					{WeightFrom: 0, WeightTo: 0.5, CalcType: "fixed", FixedPrice: parseFloat(getCol(row, 14), 0)},
-					{WeightFrom: 0.51, WeightTo: 1, CalcType: "fixed", FixedPrice: parseFloat(getCol(row, 15), 0)},
-					{WeightFrom: 1, WeightTo: 2, CalcType: "fixed", FixedPrice: parseFloat(getCol(row, 16), 0)},
-					{WeightFrom: 2, WeightTo: 3, CalcType: "fixed", FixedPrice: parseFloat(getCol(row, 17), 0)},
-					{WeightFrom: 3, WeightTo: 30, CalcType: "first_cont", FirstWeight: firstWeight, FirstPrice: parseFloat(getCol(row, 18), 0), ContPrice: parseFloat(getCol(row, 19), 0), ContMode: contMode},
-					{WeightFrom: 30, WeightTo: 0, CalcType: "first_cont", FirstWeight: firstWeight, FirstPrice: parseFloat(getCol(row, 20), 0), ContPrice: parseFloat(getCol(row, 21), 0), ContMode: contMode},
+					{WeightFrom: 0, WeightTo: 0.5, CalcType: "fixed", FixedPrice: parseFloat(getCol(row, 14), 0), SortOrder: 1},
+					{WeightFrom: 0.5, WeightTo: 1, CalcType: "fixed", FixedPrice: parseFloat(getCol(row, 15), 0), SortOrder: 2},
+					{WeightFrom: 1, WeightTo: 2, CalcType: "fixed", FixedPrice: parseFloat(getCol(row, 16), 0), SortOrder: 3},
+					{WeightFrom: 2, WeightTo: 3, CalcType: "fixed", FixedPrice: parseFloat(getCol(row, 17), 0), SortOrder: 4},
+					{WeightFrom: 3, WeightTo: 30, CalcType: "first_cont", FirstWeight: firstWeight, FirstPrice: parseFloat(getCol(row, 18), 0), ContPrice: parseFloat(getCol(row, 19), 0), ContMode: contMode, SortOrder: 5},
+					{WeightFrom: 30, WeightTo: 0, CalcType: "first_cont", FirstWeight: firstWeight, FirstPrice: parseFloat(getCol(row, 20), 0), ContPrice: parseFloat(getCol(row, 21), 0), ContMode: contMode, SortOrder: 6},
 				}
 			}
 		} else {
@@ -348,6 +350,13 @@ func (a *App) ImportCustomerRules(records [][]string) (int, string) {
 			remark = "批量导入"
 		}
 
+		// 根据区域名称查找zone_id
+		if zoneName != "" {
+			if zone, _ := rules.GetZoneByName(zoneName); zone != nil {
+				zoneID = zone.ID
+			}
+		}
+
 		rule := rules.FreightRule{
 			RuleType:     ruleType,
 			CustomerName: customerName,
@@ -363,6 +372,7 @@ func (a *App) ImportCustomerRules(records [][]string) (int, string) {
 			IsEnabled:    isEnabled,
 			Remark:       remark,
 			Brackets:     brackets,
+			ZoneID:       zoneID,
 		}
 		if _, err := rules.Save(&rule); err == nil {
 			count++
@@ -456,6 +466,17 @@ func (a *App) doCalc(rowData []excel.RowData, progress ProgressFn, inputFile str
 	// 预加载重量区间数据（批量计算性能优化）
 	bracketMap, _ := rules.LoadRuleBrackets(allRules)
 
+	// 预加载省份加价数据（避免每行查数据库，大幅提升性能）
+	provSurchargeMap := make(map[string]float64)
+	if provList, err := rules.GetAllProvinceSurcharges(); err == nil {
+		for _, p := range provList {
+			provSurchargeMap[p.ProvinceName] = p.Surcharge
+		}
+	}
+
+	// 预加载拉均重规则（避免每客户查数据库）
+	avgCustomerRules, avgGlobalRule := rules.LoadAllAvgWeightRules()
+
 	numWorkers := runtime.NumCPU()
 	if numWorkers < 1 {
 		numWorkers = 1
@@ -486,8 +507,8 @@ func (a *App) doCalc(rowData []excel.RowData, progress ProgressFn, inputFile str
 		go func(start, end int) {
 			defer wg.Done()
 			for i := start; i < end; i++ {
-				fee, _, markup, _, best := freight.CalcSingleWithIndex(
-					rowData[i].Weight, rowData[i].Customer, rowData[i].Province, ruleIdx, gr, bracketMap)
+				fee, _, markup, _, best := freight.CalcSingleWithIndexFast(
+					rowData[i].Weight, rowData[i].Customer, rowData[i].Province, ruleIdx, gr, bracketMap, provSurchargeMap)
 				rowData[i].Fee = fee
 				markupCents.Add(int64(markup * 100))
 				if best != nil {
@@ -510,8 +531,8 @@ func (a *App) doCalc(rowData []excel.RowData, progress ProgressFn, inputFile str
 		progress("calculating", total, total, "正在计算拉均重加价...")
 	}
 
-	// 计算并应用拉均重偏差加价
-	avgResults, totalAvgMarkup := freight.CalcAvgWeightMarkup(rowData)
+	// 计算并应用拉均重偏差加价（使用预加载的规则，避免重复查数据库）
+	avgResults, totalAvgMarkup := freight.CalcAvgWeightMarkupFast(rowData, avgCustomerRules, avgGlobalRule)
 	if len(avgResults) > 0 && totalAvgMarkup > 0 {
 		freight.ApplyAvgWeightToRows(rowData, avgResults)
 	}
@@ -943,7 +964,7 @@ func (a *App) ExportCustomerRules(customerName string) ([][]string, string) {
 						switch {
 						case b.WeightFrom == 0 && b.WeightTo == 0.5:
 							row[14] = fmt.Sprintf("%g", b.FixedPrice)
-						case b.WeightFrom == 0.51 && b.WeightTo == 1:
+						case b.WeightFrom == 0.5 && b.WeightTo == 1:
 							row[15] = fmt.Sprintf("%g", b.FixedPrice)
 						case b.WeightFrom == 1 && b.WeightTo == 2:
 							row[16] = fmt.Sprintf("%g", b.FixedPrice)

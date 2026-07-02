@@ -155,7 +155,7 @@
           <div v-if="viewMode === 'zone'" class="zone-view-wrap" v-loading="loadingRules">
             <template v-if="customerRules.length > 0">
               <div class="zone-table-container">
-                <el-table :data="bracketRules" stripe border size="small" max-height="calc(100vh - 460px)" class="zone-big-table">
+                <el-table :data="bracketRules" stripe border size="small" max-height="calc(100vh - 460px)" class="zone-big-table" :row-class-name="({row}) => row.calc_mode === 'simple' ? 'simple-mode-row' : ''">
                   <el-table-column prop="province" label="省份" width="80" fixed="left">
                     <template #default="{row}">
                       <span :class="{ 'rule-disabled': row.is_enabled !== 1 }">{{ row.province || '全国' }}</span>
@@ -532,9 +532,10 @@
     <el-dialog v-model="avgWeightDlgVisible" title="拉均重/偏差加价配置" width="600px" destroy-on-close>
       <div class="aw-help-box">
         <el-icon size="16" color="#409eff"><HelpFilled /></el-icon>
-        <span>拉均重规则用于对平均重量偏低的客户进行加价惩罚，防止小件包裹过度占用快递资源。</span>
+        <span>拉均重规则用于对平均重量偏高的客户进行加价，重量越重加价越多。</span>
         <ul class="aw-help-list">
-          <li><strong>计算逻辑：</strong>按客户分组计算平均重量，低于基准重量时按偏差步长加价，加价分摊到每个包裹。</li>
+          <li><strong>计算逻辑：</strong>按客户分组计算平均重量，高于基准重量时，超出部分按每公斤单价加价，加价分摊到每个参与计算的包裹。</li>
+          <li><strong>加价公式：</strong>单件加价 = (平均重量 - 基准重量) × 每公斤加价</li>
           <li><strong>优先级：</strong>客户专属规则 > 全局规则。</li>
           <li><strong>重量上限：</strong>超过设定重量的包裹不参与平均计算，也不会被加价。</li>
         </ul>
@@ -552,35 +553,22 @@
         <el-form-item label="基准重量">
           <el-input-number v-model="awForm.base_weight" :min="0.01" :step="0.1" :precision="2" style="width:180px" />
           <span class="form-unit">kg</span>
-          <div class="form-tip">平均重量低于此值时，触发偏差加价</div>
+          <div class="form-tip">平均重量高于此值时，触发加价</div>
         </el-form-item>
         <el-form-item label="重量上限">
           <el-input-number v-model="awForm.weight_limit" :min="0" :step="0.5" :precision="1" style="width:180px" />
           <span class="form-unit">kg</span>
           <div class="form-tip">超过此重量的包裹不参与拉均重计算和加价，0表示不限制</div>
         </el-form-item>
-        <el-form-item label="偏差步长">
-          <el-input-number v-model="awForm.step_weight" :min="0.01" :step="0.05" :precision="2" style="width:180px" />
-          <span class="form-unit">kg</span>
-          <div class="form-tip">每低于基准多少公斤，加一次价</div>
-        </el-form-item>
-        <el-form-item label="每步加价">
+        <el-form-item label="每公斤加价">
           <el-input-number v-model="awForm.step_price" :min="0.01" :step="0.1" :precision="2" style="width:180px" />
-          <span class="form-unit">元/件</span>
-          <div class="form-tip">每个偏差步长，每件货物加价多少</div>
+          <span class="form-unit">元/kg</span>
+          <div class="form-tip">超出基准重量每公斤，每件加多少元</div>
         </el-form-item>
         <el-form-item label="单件最高加价">
           <el-input-number v-model="awForm.max_markup" :min="0" :step="0.5" :precision="2" style="width:180px" />
           <span class="form-unit">元</span>
           <div class="form-tip">0 表示不限制</div>
-        </el-form-item>
-        <el-form-item label="取整方式">
-          <el-radio-group v-model="awForm.round_mode">
-            <el-radio value="ceil">向上取整</el-radio>
-            <el-radio value="round">四舍五入</el-radio>
-            <el-radio value="floor">向下取整</el-radio>
-          </el-radio-group>
-          <div class="form-tip">偏差重量 ÷ 步长 的取整方式</div>
         </el-form-item>
         <el-form-item label="启用状态">
           <el-switch v-model="awForm.is_enabled" :active-value="1" :inactive-value="0" />
@@ -890,8 +878,8 @@ const awForm = reactive<AvgWeightRule>({
   id: 0,
   scope_type: 'global',
   customer_name: '',
-  base_weight: 0.3,
-  weight_limit: 3,
+  base_weight: 0.5,
+  weight_limit: 1,
   step_weight: 0.1,
   step_price: 0.1,
   max_markup: 0,
@@ -900,37 +888,40 @@ const awForm = reactive<AvgWeightRule>({
   remark: '',
 })
 
-const zoneGroups = computed(() => {
-  const list = customerRules.value || []
-  const bracketRules = list.filter(r => r.calc_mode === 'bracket' && r.zone_name)
-  const groups: Record<string, { zone_name: string; zone_order: number; rules: FreightRule[] }> = {}
-  for (const r of bracketRules) {
-    if (!groups[r.zone_name]) {
-      const zoneOrder = extractZoneOrder(r.zone_name)
-      groups[r.zone_name] = { zone_name: r.zone_name, zone_order: zoneOrder, rules: [] }
-    }
-    groups[r.zone_name].rules.push(r)
-  }
-  return Object.values(groups).sort((a, b) => a.zone_order - b.zone_order)
-})
-
 const bracketRules = computed(() => {
   const list = customerRules.value || []
-  return list.filter(r => r.calc_mode === 'bracket' && r.zone_name)
+  return list.filter(r => r.zone_name)
     .sort((a, b) => {
       const za = extractZoneOrder(a.zone_name)
       const zb = extractZoneOrder(b.zone_name)
       if (za !== zb) return za - zb
+      if (a.calc_mode !== b.calc_mode) return a.calc_mode === 'bracket' ? -1 : 1
       return (a.province || '').localeCompare(b.province || '')
     })
 })
 
 function extractZoneOrder(name: string): number {
+  if (!name) return 99
+  const cnMap: Record<string, number> = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 }
+  const cnMatch = name.match(/([一二三四五六七八九十]+)区/)
+  if (cnMatch) {
+    let num = 0
+    for (const ch of cnMatch[1]) {
+      if (cnMap[ch]) num = num * 10 + cnMap[ch]
+    }
+    return num > 0 ? num : 99
+  }
   const m = name.match(/(\d+)/)
   return m ? parseInt(m[1]) : 99
 }
 
 function getBracketFixedPrice(rule: FreightRule, from: number, to: number): string {
+  if (rule.calc_mode === 'simple') {
+    if (to > 0 && to <= rule.first_weight) {
+      return '¥' + rule.first_price.toFixed(2)
+    }
+    return '—'
+  }
   if (!rule.brackets || rule.brackets.length === 0) return '—'
   const b = rule.brackets.find(x => x.weight_from === from && (x.weight_to === to || (to === 0 && x.weight_to === 0)))
   if (!b || b.calc_type !== 'fixed') return '—'
@@ -938,6 +929,12 @@ function getBracketFixedPrice(rule: FreightRule, from: number, to: number): stri
 }
 
 function getBracketFirstPrice(rule: FreightRule, from: number, to: number): string {
+  if (rule.calc_mode === 'simple') {
+    if (from >= rule.first_weight || from === 0) {
+      return '¥' + rule.first_price.toFixed(2)
+    }
+    return '—'
+  }
   if (!rule.brackets || rule.brackets.length === 0) return '—'
   const b = rule.brackets.find(x => x.weight_from === from && (x.weight_to === to || (to === 0 && x.weight_to === 0)))
   if (!b || b.calc_type !== 'first_cont') return '—'
@@ -945,6 +942,12 @@ function getBracketFirstPrice(rule: FreightRule, from: number, to: number): stri
 }
 
 function getBracketContPrice(rule: FreightRule, from: number, to: number): string {
+  if (rule.calc_mode === 'simple') {
+    if (from >= rule.first_weight || from === 0) {
+      return '¥' + rule.cont_price.toFixed(2)
+    }
+    return '—'
+  }
   if (!rule.brackets || rule.brackets.length === 0) return '—'
   const b = rule.brackets.find(x => x.weight_from === from && (x.weight_to === to || (to === 0 && x.weight_to === 0)))
   if (!b || b.calc_type !== 'first_cont') return '—'
@@ -993,8 +996,8 @@ function openAvgWeightDlg() {
     awForm.id = 0
     awForm.scope_type = 'customer'
     awForm.customer_name = activeCustomer.value || ''
-    awForm.base_weight = 0.3
-    awForm.weight_limit = 3
+    awForm.base_weight = 0.5
+    awForm.weight_limit = 1
     awForm.step_weight = 0.1
     awForm.step_price = 0.1
     awForm.max_markup = 0
@@ -1010,12 +1013,8 @@ async function saveAvgWeightRule() {
     ElMessage.warning('基准重量必须大于0')
     return
   }
-  if (awForm.step_weight <= 0) {
-    ElMessage.warning('偏差步长必须大于0')
-    return
-  }
   if (awForm.step_price <= 0) {
-    ElMessage.warning('每步加价必须大于0')
+    ElMessage.warning('每公斤加价必须大于0')
     return
   }
   savingAvgWeight.value = true
@@ -1431,6 +1430,13 @@ onBeforeUnmount(() => {
   color: #67c23a;
 }
 .zone-big-table .rule-disabled { opacity: 0.45; }
+.zone-big-table :deep(.simple-mode-row) {
+  background: #f5f7ff !important;
+}
+.zone-big-table :deep(.simple-mode-row td) {
+  color: #909399 !important;
+  font-style: italic;
+}
 .avgweight-cell {
   display: flex; flex-direction: column; gap: 6px; align-items: center;
   line-height: 1.4;

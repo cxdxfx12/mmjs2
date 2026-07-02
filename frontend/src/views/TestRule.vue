@@ -58,7 +58,7 @@
                 <span v-if="testResult.avg_weight_rule.is_enabled">
                   · 基准{{ testResult.avg_weight_rule.base_weight }}kg
                   <span v-if="testResult.avg_weight_rule.weight_limit > 0">· 上限{{ testResult.avg_weight_rule.weight_limit }}kg</span>
-                  · 步长{{ testResult.avg_weight_rule.step_weight }}kg/{{ testResult.avg_weight_rule.step_price }}元
+                  · {{ testResult.avg_weight_rule.step_price }}元/kg
                 </span>
               </span>
             </div>

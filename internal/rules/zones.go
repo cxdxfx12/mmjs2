@@ -59,6 +59,18 @@ func GetZoneByProvince(province string) (*Zone, error) {
 	return &z, nil
 }
 
+// GetZoneByName 根据区域名称查找区域
+func GetZoneByName(zoneName string) (*Zone, error) {
+	var z Zone
+	err := db.DB.QueryRow(`SELECT id, zone_name, zone_order, remark 
+		FROM freight_zones WHERE zone_name=? LIMIT 1`, zoneName).Scan(
+		&z.ID, &z.ZoneName, &z.ZoneOrder, &z.Remark)
+	if err != nil {
+		return nil, err
+	}
+	return &z, nil
+}
+
 // SaveZone 保存区域（新增或更新）
 func SaveZone(z *Zone) (int64, error) {
 	if z.ID > 0 {

@@ -44,6 +44,9 @@ func SaveBrackets(ruleID int64, brackets []WeightBracket) error {
 
 // FindBracket 从区间列表中查找匹配的重量区间
 func FindBracket(weight float64, brackets []WeightBracket) *WeightBracket {
+	if len(brackets) == 0 {
+		return nil
+	}
 	for _, b := range brackets {
 		if weight >= b.WeightFrom {
 			if b.WeightTo <= 0 || weight < b.WeightTo {
@@ -51,11 +54,12 @@ func FindBracket(weight float64, brackets []WeightBracket) *WeightBracket {
 			}
 		}
 	}
-	// 兜底：返回最后一个（或第一个）
-	if len(brackets) > 0 {
-		return &brackets[len(brackets)-1]
+	// 重量小于所有区间起始值，返回第一个区间（最小的）
+	if weight < brackets[0].WeightFrom {
+		return &brackets[0]
 	}
-	return nil
+	// 重量大于所有区间（最后一个区间没有上限的情况不会走到这里），返回最后一个
+	return &brackets[len(brackets)-1]
 }
 
 // LoadRuleBrackets 批量加载规则的区间数据（用于批量计算前预加载）
