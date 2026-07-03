@@ -74,15 +74,16 @@ def generate_syso(ico_path, syso_path, arch='386'):
     # Build group icon data (GRPICONDIR)
     group_data = bytearray()
     group_data += struct.pack('<HHH', 0, 1, num_images)
+    # GRPICONDIRENTRY: 14 bytes (bWidth, bHeight, bColorCount, bReserved,
+    #   wPlanes, wBitCount, dwBytesInRes, nID)
     for i, img in enumerate(images):
-        group_data += struct.pack('<BBBBHHHIH',
+        group_data += struct.pack('<BBBBHHIH',
             img['w'] if img['w'] < 256 else 0,
             img['h'] if img['h'] < 256 else 0,
             img['colors'] if img['colors'] < 256 else 0,
             0,
             img['planes'],
             img['bpp'],
-            img['size'],
             img['size'],
             i + 1
         )

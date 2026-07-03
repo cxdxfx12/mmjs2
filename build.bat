@@ -18,15 +18,9 @@ REM 添加 Windows Defender 排除 (需管理员权限)
 echo [喵喵云结算] 正在添加 Windows Defender 排除路径...
 powershell -Command "Add-MpPreference -ExclusionPath '%~dp0' -ErrorAction SilentlyContinue" >nul 2>&1
 
-REM 生成 exe 图标资源（需要网络安装 go-winres: go install github.com/tc-hib/go-winres@latest）
-REM 临时跳过图标，gen_syso.py 生成的 syso 会导致 PE 损坏
-REM echo [喵喵云结算] 生成图标资源...
-REM cd /d "%~dp0"
-REM if not exist "rsrc_windows_amd64.syso" (
-REM     if exist "monkey.ico" (
-REM         go-winres make --product-version=1.0.0 --file-version=1.0.0 --icon=monkey.ico
-REM     )
-REM )
+REM 生成 exe 图标资源（使用 ico_to_syso.py 生成 rsrc_windows_amd64.syso）
+REM syso 文件已预生成并提交到仓库，无需每次重新生成
+REM 如需重新生成：python ico_to_syso.py monkey.ico rsrc_windows_amd64.syso amd64
 
 REM 编译前端
 echo [喵喵云结算] 编译前端...
