@@ -294,7 +294,7 @@ func (a *App) ImportCustomerRules(records [][]string) (int, string) {
 		var zoneID int64
 
 		if isNewFormat {
-			province = getCol(row, 1)
+			province = rules.NormalizeProvince(getCol(row, 1))
 			calcMode = getCol(row, 2)
 			if calcMode == "" {
 				calcMode = "simple"
@@ -334,7 +334,7 @@ func (a *App) ImportCustomerRules(records [][]string) (int, string) {
 				}
 			}
 		} else {
-			province = getCol(row, 1)
+			province = rules.NormalizeProvince(getCol(row, 1))
 			contMode = getCol(row, 2)
 			if contMode == "" {
 				contMode = "full_kg"
@@ -470,7 +470,8 @@ func (a *App) doCalc(rowData []excel.RowData, progress ProgressFn, inputFile str
 	provSurchargeMap := make(map[string]float64)
 	if provList, err := rules.GetAllProvinceSurcharges(); err == nil {
 		for _, p := range provList {
-			provSurchargeMap[p.ProvinceName] = p.Surcharge
+			provKey := rules.NormalizeProvince(p.ProvinceName)
+			provSurchargeMap[provKey] = p.Surcharge
 		}
 	}
 

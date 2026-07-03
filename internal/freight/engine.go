@@ -74,13 +74,14 @@ func doCalcSingle(weight float64, province string, best *rules.RuleResult, gr *r
 
 	// 获取省份加价（优先用预加载map，找不到再查数据库）
 	getProvSurcharge := func(p string) float64 {
+		provKey := rules.NormalizeProvince(p)
 		if provSurchargeMap != nil {
-			if v, ok := provSurchargeMap[p]; ok {
+			if v, ok := provSurchargeMap[provKey]; ok {
 				return v
 			}
 			return 0
 		}
-		return rules.GetProvinceSurcharge(p)
+		return rules.GetProvinceSurcharge(provKey)
 	}
 
 	// 零重量保护：重量为正但极小时用 no_weight_price

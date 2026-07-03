@@ -12,6 +12,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -462,8 +463,9 @@ func main() {
 		if customerName != "" {
 			filename = customerName + "_规则.xlsx"
 		}
+		escaped := url.QueryEscape(filename)
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`, filename, escaped))
 		tf.Write(w)
 	})
 
@@ -664,6 +666,14 @@ func main() {
 		ruleIdx := rules.BuildRuleIndex(allRules, gr)
 		// 预加载重量区间数据
 		bracketMap, _ := rules.LoadRuleBrackets(allRules)
+		// 预加载省份加价数据（避免每行查数据库，大幅提升性能）
+		provSurchargeMap := make(map[string]float64)
+		if provList, err := rules.GetAllProvinceSurcharges(); err == nil {
+			for _, p := range provList {
+				provKey := rules.NormalizeProvince(p.ProvinceName)
+				provSurchargeMap[provKey] = p.Surcharge
+			}
+		}
 		for _, t := range tasks {
 			taskID := t.TaskID
 			filePath := t.FilePath
@@ -711,8 +721,8 @@ func main() {
 					go func(start, end int) {
 						defer wg.Done()
 						for i := start; i < end; i++ {
-							fee, _, markup, _, best := freight.CalcSingleWithIndex(
-								rowData[i].Weight, rowData[i].Customer, rowData[i].Province, ruleIdx, gr, bracketMap)
+							fee, _, markup, _, best := freight.CalcSingleWithIndexFast(
+								rowData[i].Weight, rowData[i].Customer, rowData[i].Province, ruleIdx, gr, bracketMap, provSurchargeMap)
 							rowData[i].Fee = fee
 							markupCents.Add(int64(markup * 100))
 							if best != nil {
@@ -960,7 +970,9 @@ func main() {
 		}
 
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(tmpFile)))
+		filename := filepath.Base(tmpFile)
+		escaped := url.QueryEscape(filename)
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`, filename, escaped))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", getFileSize(tmpFile)))
 		http.ServeFile(w, r, tmpFile)
 	})

@@ -11,23 +11,23 @@ import (
 	"strings"
 
 	"github.com/xuri/excelize/v2"
+	"yunfei/internal/rules"
 )
 
 // RowData 一行结算数据
 type RowData struct {
-	BusinessTime   string  `json:"business_time"`
-	WaybillNo      string  `json:"waybill_no"`
-	Weight         float64 `json:"weight"`
-	Province       string  `json:"province"`
-	VolWeight      float64 `json:"vol_weight"`
-	Station        string  `json:"station"`
-	PackageStation string  `json:"package_station"`
-	Customer       string  `json:"customer"`
-	Fee            float64 `json:"fee"`
-	RuleLevel      string  `json:"rule_level"`
-	ContMode       string  `json:"cont_mode"`
-	CalcMode       string  `json:"calc_mode"`       // simple | bracket
-	ZoneName       string  `json:"zone_name"`         // 所属区域名称
+	BusinessTime    string  `json:"business_time"`
+	WaybillNo       string  `json:"waybill_no"`
+	Weight          float64 `json:"weight"`
+	Province        string  `json:"province"`
+	VolWeight       float64 `json:"vol_weight"`
+	PackageStation  string  `json:"package_station"`
+	Customer        string  `json:"customer"`
+	Fee             float64 `json:"fee"`
+	RuleLevel       string  `json:"rule_level"`
+	ContMode        string  `json:"cont_mode"`
+	CalcMode        string  `json:"calc_mode"`        // simple | bracket
+	ZoneName        string  `json:"zone_name"`         // 所属区域名称
 	AvgWeightMarkup float64 `json:"avg_weight_markup"` // 拉均重加价
 }
 
@@ -110,66 +110,30 @@ func ReadPreview(filePath string) (*ExcelPreview, error) {
 	return preview, nil
 }
 
+// detectColumns 精确匹配列名
+// 只识别：业务时间、运单号、结算重量、目的省份、体积重、客户、集包网点
 func detectColumns(header []string) map[string]int {
 	m := make(map[string]int)
 	for i, h := range header {
-		hLower := strings.ToLower(h)
-		// 已设置过的高优先级列不覆盖
-		switch {
-		case strContains(h, "业务时间", "date"):
-			// 高优先级：精确匹配业务时间
-			if _, ok := m["date"]; !ok || strings.Contains(h, "业务时间") {
-				m["date"] = i
-			}
-		case strContains(h, "时间", "日期", "time"):
-			if _, ok := m["date"]; !ok {
-				m["date"] = i
-			}
-		case strContains(h, "运单", "单号", "waybill"):
+		h = strings.TrimSpace(h)
+		switch h {
+		case "业务时间":
+			m["date"] = i
+		case "运单号":
 			m["waybill"] = i
-		case strContains(h, "结算重量", "计费重量", "重量", "weight"):
+		case "结算重量":
 			m["weight"] = i
-		case strContains(h, "目的省"):
-			// 高优先级：目的省份 > 签收省份 > 省份
+		case "目的省份":
 			m["province"] = i
-		case strings.Contains(hLower, "province"):
-			if _, ok := m["province"]; !ok {
-				m["province"] = i
-			}
-		case strContains(h, "省份", "签收省"):
-			// 低优先级：只有在没有目的省份时才设置
-			if _, ok := m["province"]; !ok {
-				m["province"] = i
-			}
-		case strContains(hLower, "体积重", "体积", "vol"):
+		case "体积重":
 			m["vol_weight"] = i
-		case strContains(h, "订单/面单网点", "订单网点", "面单网点", "station"):
-			m["station"] = i
-		case strContains(h, "集包网点", "集包", "package"):
+		case "客户":
+			m["customer"] = i
+		case "集包网点":
 			m["package_station"] = i
-		case strContains(h, "客户"):
-			// 精确匹配"客户"列，优先级高于"订单客户"
-			if h == "客户" || strings.TrimSpace(h) == "客户" {
-				m["customer"] = i
-			} else if _, ok := m["customer"]; !ok {
-				m["customer"] = i
-			}
-		case strContains(hLower, "customer", "client"):
-			if _, ok := m["customer"]; !ok {
-				m["customer"] = i
-			}
 		}
 	}
 	return m
-}
-
-func strContains(s string, keys ...string) bool {
-	for _, k := range keys {
-		if strings.Contains(s, k) {
-			return true
-		}
-	}
-	return false
 }
 
 func getCol(row []string, idx int) string {
@@ -177,28 +141,6 @@ func getCol(row []string, idx int) string {
 		return ""
 	}
 	return strings.TrimSpace(row[idx])
-}
-
-// normalizeProvince 标准化省份名称（去掉"省"、"市"、"自治区"等后缀）
-func normalizeProvince(province string) string {
-	province = strings.TrimSpace(province)
-	// 先处理长后缀（避免被短后缀截断）
-	if strings.HasSuffix(province, "维吾尔自治区") {
-		province = strings.TrimSuffix(province, "维吾尔自治区")
-	} else if strings.HasSuffix(province, "回族自治区") {
-		province = strings.TrimSuffix(province, "回族自治区")
-	} else if strings.HasSuffix(province, "壮族自治区") {
-		province = strings.TrimSuffix(province, "壮族自治区")
-	} else if strings.HasSuffix(province, "自治区") {
-		province = strings.TrimSuffix(province, "自治区")
-	}
-	// 然后处理短后缀
-	province = strings.TrimSuffix(province, "省")
-	province = strings.TrimSuffix(province, "市")
-	province = strings.TrimSuffix(province, "特别行政区")
-	province = strings.TrimSuffix(province, "地区")
-	province = strings.TrimSpace(province)
-	return province
 }
 
 func getColFloat(row []string, idx int) float64 {
@@ -667,9 +609,8 @@ func ReadAllRowsWithProgress(filePath string, progress ProgressCallback) ([]RowD
 			BusinessTime:   getColDate(row, colMap["date"]),
 			WaybillNo:      getCol(row, colMap["waybill"]),
 			Weight:         billWeight,
-			Province:       normalizeProvince(getCol(row, colMap["province"])), // 标准化省份名称
+			Province:       rules.NormalizeProvince(getCol(row, colMap["province"])),
 			VolWeight:      volWeight,
-			Station:        getCol(row, colMap["station"]),
 			PackageStation: getCol(row, colMap["package_station"]),
 			Customer:       getCol(row, colMap["customer"]),
 		}
@@ -695,8 +636,7 @@ func WriteResult(outputPath string, data []RowData, summary *CalcSummary) error 
 	}
 
 	// 表头
-	header := []interface{}{"业务时间", "运单号", "结算重量(kg)", "目的省份", "体积重(kg)", "订单/面单网点", "集包网点", "客户",
-		"运费(元)", "拉均重加价(元)", "规则级别", "续重模式", "计费模式", "所属区域"}
+	header := []interface{}{"业务时间", "运单号", "结算重量(kg)", "目的省份", "集包网点", "客户", "运费(元)"}
 	sw.SetRow("A1", header)
 
 	headerStyle, _ := f.NewStyle(&excelize.Style{
@@ -704,15 +644,14 @@ func WriteResult(outputPath string, data []RowData, summary *CalcSummary) error 
 		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#4472C4"}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 	})
-	f.SetCellStyle(sheetName, "A1", "N1", headerStyle)
+	f.SetCellStyle(sheetName, "A1", "G1", headerStyle)
 
 	for i, d := range data {
 		row := i + 2
 		cell, _ := excelize.CoordinatesToCellName(1, row)
 		sw.SetRow(cell, []interface{}{
-			d.BusinessTime, d.WaybillNo, d.Weight, d.Province, d.VolWeight,
-			d.Station, d.PackageStation, d.Customer, d.Fee, d.AvgWeightMarkup,
-			d.RuleLevel, d.ContMode, d.CalcMode, d.ZoneName,
+			d.BusinessTime, d.WaybillNo, d.Weight, d.Province,
+			d.PackageStation, d.Customer, d.Fee,
 		})
 	}
 	if err := sw.Flush(); err != nil {
@@ -725,8 +664,7 @@ func WriteResult(outputPath string, data []RowData, summary *CalcSummary) error 
 	}
 
 	// 列宽
-	colWidths := map[string]float64{"A": 14, "B": 20, "C": 14, "D": 10, "E": 12, "F": 20, "G": 18, "H": 14,
-		"I": 12, "J": 14, "K": 10, "L": 10, "M": 10, "N": 10}
+	colWidths := map[string]float64{"A": 14, "B": 20, "C": 14, "D": 10, "E": 18, "F": 14, "G": 12}
 	for col, w := range colWidths {
 		f.SetColWidth(sheetName, col, col, w)
 	}

@@ -24,10 +24,11 @@ func calcAvgWeightWithRules(rowData []excel.RowData, customerRules map[string]*r
 	// 按客户分组收集重量
 	customerWeights := make(map[string][]float64)
 	for _, row := range rowData {
-		if row.Customer == "" {
-			row.Customer = "默认客户"
+		custKey := rules.NormalizeCustomerName(row.Customer)
+		if custKey == "" {
+			custKey = "默认客户"
 		}
-		customerWeights[row.Customer] = append(customerWeights[row.Customer], row.Weight)
+		customerWeights[custKey] = append(customerWeights[custKey], row.Weight)
 	}
 
 	var results []rules.AvgWeightResult
@@ -140,7 +141,8 @@ func ApplyAvgWeightToRows(rowData []excel.RowData, avgResults []rules.AvgWeightR
 	}
 	markupMap := make(map[string]markupInfo)
 	for _, r := range avgResults {
-		markupMap[r.Customer] = markupInfo{
+		custKey := rules.NormalizeCustomerName(r.Customer)
+		markupMap[custKey] = markupInfo{
 			markup:      r.PerItemMarkup,
 			weightLimit: r.WeightLimit,
 		}
@@ -148,10 +150,11 @@ func ApplyAvgWeightToRows(rowData []excel.RowData, avgResults []rules.AvgWeightR
 
 	for i := range rowData {
 		customer := rowData[i].Customer
-		if customer == "" {
-			customer = "默认客户"
+		custKey := rules.NormalizeCustomerName(customer)
+		if custKey == "" {
+			custKey = "默认客户"
 		}
-		if info, ok := markupMap[customer]; ok && info.markup > 0 {
+		if info, ok := markupMap[custKey]; ok && info.markup > 0 {
 			// 超过重量上限的不加价（不参与拉均重计算）
 			if info.weightLimit > 0 && rowData[i].Weight > info.weightLimit {
 				continue

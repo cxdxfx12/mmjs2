@@ -41,7 +41,8 @@ func LoadAllAvgWeightRules() (map[string]*AvgWeightRule, *AvgWeightRule) {
 		rows.Scan(&r.ID, &r.ScopeType, &r.CustomerName, &r.BaseWeight,
 			&r.WeightLimit, &r.StepWeight, &r.StepPrice, &r.MaxMarkup, &r.RoundMode, &r.IsEnabled, &r.Remark)
 		if r.ScopeType == "customer" && r.CustomerName != "" {
-			customerRules[r.CustomerName] = &r
+			custKey := NormalizeCustomerName(r.CustomerName)
+			customerRules[custKey] = &r
 		} else if r.ScopeType == "global" {
 			globalRule = &r
 		}
@@ -51,11 +52,12 @@ func LoadAllAvgWeightRules() (map[string]*AvgWeightRule, *AvgWeightRule) {
 
 // GetAvgWeightRuleByCustomer 获取客户的拉均重规则（优先客户级，再找全局，都没有返回nil）
 func GetAvgWeightRuleByCustomer(customer string) *AvgWeightRule {
+	custKey := NormalizeCustomerName(customer)
 	var r AvgWeightRule
 	err := db.DB.QueryRow(`SELECT id, scope_type, customer_name, base_weight, 
 		weight_limit, step_weight, step_price, max_markup, round_mode, is_enabled, remark
 		FROM avg_weight_rules WHERE scope_type='customer' AND customer_name=?
-		LIMIT 1`, customer).Scan(
+		LIMIT 1`, custKey).Scan(
 		&r.ID, &r.ScopeType, &r.CustomerName, &r.BaseWeight,
 		&r.WeightLimit, &r.StepWeight, &r.StepPrice, &r.MaxMarkup, &r.RoundMode, &r.IsEnabled, &r.Remark)
 	if err == nil && r.ID > 0 {
@@ -75,6 +77,7 @@ func GetAvgWeightRuleByCustomer(customer string) *AvgWeightRule {
 
 // SaveAvgWeightRule 保存拉均重规则
 func SaveAvgWeightRule(r *AvgWeightRule) (int64, error) {
+	r.CustomerName = NormalizeCustomerName(r.CustomerName)
 	if r.ID > 0 {
 		_, err := db.DB.Exec(`UPDATE avg_weight_rules SET scope_type=?, customer_name=?, 
 			base_weight=?, weight_limit=?, step_weight=?, step_price=?, max_markup=?, round_mode=?, 

@@ -47,11 +47,12 @@ func GetZoneProvinces(zoneID int64) ([]string, error) {
 
 // GetZoneByProvince 根据省份查找所在区域
 func GetZoneByProvince(province string) (*Zone, error) {
+	provKey := NormalizeProvince(province)
 	var z Zone
 	err := db.DB.QueryRow(`SELECT z.id, z.zone_name, z.zone_order, z.remark 
 		FROM freight_zones z 
 		INNER JOIN freight_zone_provinces zp ON z.id = zp.zone_id 
-		WHERE zp.province_name=? LIMIT 1`, province).Scan(
+		WHERE zp.province_name=? LIMIT 1`, provKey).Scan(
 		&z.ID, &z.ZoneName, &z.ZoneOrder, &z.Remark)
 	if err != nil {
 		return nil, err
@@ -82,7 +83,8 @@ func SaveZone(z *Zone) (int64, error) {
 		// 更新省份：先删后插
 		db.DB.Exec("DELETE FROM freight_zone_provinces WHERE zone_id=?", z.ID)
 		for _, p := range z.Provinces {
-			db.DB.Exec("INSERT INTO freight_zone_provinces (zone_id, province_name) VALUES (?, ?)", z.ID, p)
+			provName := NormalizeProvince(p)
+			db.DB.Exec("INSERT INTO freight_zone_provinces (zone_id, province_name) VALUES (?, ?)", z.ID, provName)
 		}
 		return z.ID, nil
 	}
@@ -93,7 +95,8 @@ func SaveZone(z *Zone) (int64, error) {
 	}
 	id, _ := res.LastInsertId()
 	for _, p := range z.Provinces {
-		db.DB.Exec("INSERT INTO freight_zone_provinces (zone_id, province_name) VALUES (?, ?)", id, p)
+		provName := NormalizeProvince(p)
+		db.DB.Exec("INSERT INTO freight_zone_provinces (zone_id, province_name) VALUES (?, ?)", id, provName)
 	}
 	return id, nil
 }

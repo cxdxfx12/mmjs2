@@ -75,6 +75,8 @@ func GetByID(id int64) (*FreightRule, error) {
 }
 
 func Save(r *FreightRule) (int64, error) {
+	r.Province = NormalizeProvince(r.Province)
+	r.CustomerName = NormalizeCustomerName(r.CustomerName)
 	if r.ID > 0 {
 		var existing FreightRule
 		db.DB.QueryRow(`SELECT cont_mode, calc_mode FROM freight_rules WHERE id=?`, r.ID).Scan(&existing.ContMode, &existing.CalcMode)
@@ -149,8 +151,9 @@ func DeleteBatch(ids []int64) error {
 
 // DeleteByCustomer 删除指定客户的所有规则
 func DeleteByCustomer(customerName string) error {
+	custKey := NormalizeCustomerName(customerName)
 	// 先获取所有规则ID，再删除区间
-	rows, _ := db.DB.Query("SELECT id FROM freight_rules WHERE customer_name=? AND rule_type IN ('customer','campaign')", customerName)
+	rows, _ := db.DB.Query("SELECT id FROM freight_rules WHERE customer_name=? AND rule_type IN ('customer','campaign')", custKey)
 	var ids []int64
 	for rows.Next() {
 		var id int64
@@ -161,19 +164,20 @@ func DeleteByCustomer(customerName string) error {
 	for _, id := range ids {
 		db.DB.Exec("DELETE FROM freight_weight_brackets WHERE rule_id=?", id)
 	}
-	_, err := db.DB.Exec("DELETE FROM freight_rules WHERE customer_name=? AND rule_type IN ('customer','campaign')", customerName)
+	_, err := db.DB.Exec("DELETE FROM freight_rules WHERE customer_name=? AND rule_type IN ('customer','campaign')", custKey)
 	return err
 }
 
 // GetByCustomer 获取指定客户的所有规则
 func GetByCustomer(customerName string) ([]FreightRule, error) {
+	custKey := NormalizeCustomerName(customerName)
 	rows, err := db.DB.Query(`SELECT r.id,r.rule_type,r.customer_name,r.province,r.cont_mode,r.first_weight,r.first_price,r.cont_price,
 		r.min_fee,r.max_fee,r.surcharge,r.campaign_name,r.campaign_start,r.campaign_end,r.is_enabled,r.remark,r.created_at,r.updated_at,
 		r.calc_mode, r.zone_id, z.zone_name
 		FROM freight_rules r
 		LEFT JOIN freight_zones z ON r.zone_id = z.id
 		WHERE r.customer_name=? AND r.rule_type IN ('customer','campaign')
-		ORDER BY r.province`, customerName)
+		ORDER BY r.province`, custKey)
 	if err != nil {
 		return []FreightRule{}, err
 	}
@@ -263,15 +267,18 @@ func FindBestRule(customer, province string, allRules []FreightRule) *RuleResult
 		}
 	}
 
+	custKey := NormalizeCustomerName(customer)
+	provKey := NormalizeProvince(province)
+
 	// 辅助函数：在指定级别的规则中查找，先精确省份再通配省份
 	findInLevel := func(ruleType string) *RuleResult {
 		// 第一轮：精确省份匹配
 		for _, r := range enabled {
 			if r.RuleType == ruleType {
-				if ruleType != "global" && r.CustomerName != customer {
+				if ruleType != "global" && NormalizeCustomerName(r.CustomerName) != custKey {
 					continue
 				}
-				if r.Province != "" && r.Province == province {
+				if r.Province != "" && NormalizeProvince(r.Province) == provKey {
 					return &RuleResult{Rule: r, RuleLevel: ruleType}
 				}
 			}
@@ -279,7 +286,7 @@ func FindBestRule(customer, province string, allRules []FreightRule) *RuleResult
 		// 第二轮：通配省份匹配（空=全国通用）
 		for _, r := range enabled {
 			if r.RuleType == ruleType {
-				if ruleType != "global" && r.CustomerName != customer {
+				if ruleType != "global" && NormalizeCustomerName(r.CustomerName) != custKey {
 					continue
 				}
 				if r.Province == "" {
@@ -351,7 +358,7 @@ func BuildRuleIndex(allRules []FreightRule, gr *GlobalRule) *RuleIndex {
 		globalRules:   make(map[string]RuleResult),
 	}
 
-	// 第一遍：收集所有启用规则
+	// 收集所有启用的规则
 	var enabled []FreightRule
 	for _, r := range allRules {
 		if r.IsEnabled == 1 {
@@ -362,6 +369,18 @@ func BuildRuleIndex(allRules []FreightRule, gr *GlobalRule) *RuleIndex {
 	// 优先级：campaign > customer > global，高优先级覆盖低优先级
 	// 同级别内：精确省份 > 通配省份（空=全国）
 	// 策略：先加载通配（低优先级），再加载精确（高优先级，覆盖通配）
+
+	// 辅助函数：确保客户map存在
+	ensureCustomer := func(cust string) {
+		if cust == "" {
+			return
+		}
+		custKey := NormalizeCustomerName(cust)
+		if idx.customerRules[custKey] == nil {
+			idx.customerRules[custKey] = make(map[string]RuleResult)
+		}
+	}
+
 	// 1) global 规则（最低优先级）
 	// 先通配
 	for _, r := range enabled {
@@ -372,63 +391,50 @@ func BuildRuleIndex(allRules []FreightRule, gr *GlobalRule) *RuleIndex {
 	// 再精确省份（覆盖通配）
 	for _, r := range enabled {
 		if r.RuleType == "global" && r.Province != "" {
-			idx.globalRules[r.Province] = RuleResult{Rule: r, RuleLevel: "global"}
+			provKey := NormalizeProvince(r.Province)
+			idx.globalRules[provKey] = RuleResult{Rule: r, RuleLevel: "global"}
 		}
 	}
+
 	// 2) customer 规则（覆盖 global）
 	// 先通配
 	for _, r := range enabled {
-		if r.RuleType == "customer" {
-			cust := r.CustomerName
-			if cust == "" {
-				continue
-			}
-			if idx.customerRules[cust] == nil {
-				idx.customerRules[cust] = make(map[string]RuleResult)
-			}
+		if r.RuleType == "customer" && r.CustomerName != "" {
+			ensureCustomer(r.CustomerName)
+			custKey := NormalizeCustomerName(r.CustomerName)
 			if r.Province == "" {
-				idx.customerRules[cust][""] = RuleResult{Rule: r, RuleLevel: "customer"}
+				idx.customerRules[custKey][""] = RuleResult{Rule: r, RuleLevel: "customer"}
 			}
 		}
 	}
 	// 再精确省份（覆盖通配）
 	for _, r := range enabled {
-		if r.RuleType == "customer" {
-			cust := r.CustomerName
-			if cust == "" {
-				continue
-			}
-			if r.Province != "" {
-				idx.customerRules[cust][r.Province] = RuleResult{Rule: r, RuleLevel: "customer"}
-			}
+		if r.RuleType == "customer" && r.CustomerName != "" && r.Province != "" {
+			ensureCustomer(r.CustomerName)
+			custKey := NormalizeCustomerName(r.CustomerName)
+			provKey := NormalizeProvince(r.Province)
+			idx.customerRules[custKey][provKey] = RuleResult{Rule: r, RuleLevel: "customer"}
 		}
 	}
+
 	// 3) campaign 规则（最高优先级，覆盖 customer）
 	// 先通配
 	for _, r := range enabled {
-		if r.RuleType == "campaign" {
-			cust := r.CustomerName
-			if cust == "" {
-				continue
-			}
-			if idx.customerRules[cust] == nil {
-				idx.customerRules[cust] = make(map[string]RuleResult)
-			}
+		if r.RuleType == "campaign" && r.CustomerName != "" {
+			ensureCustomer(r.CustomerName)
+			custKey := NormalizeCustomerName(r.CustomerName)
 			if r.Province == "" {
-				idx.customerRules[cust][""] = RuleResult{Rule: r, RuleLevel: "campaign"}
+				idx.customerRules[custKey][""] = RuleResult{Rule: r, RuleLevel: "campaign"}
 			}
 		}
 	}
 	// 再精确省份（覆盖通配）
 	for _, r := range enabled {
-		if r.RuleType == "campaign" {
-			cust := r.CustomerName
-			if cust == "" {
-				continue
-			}
-			if r.Province != "" {
-				idx.customerRules[cust][r.Province] = RuleResult{Rule: r, RuleLevel: "campaign"}
-			}
+		if r.RuleType == "campaign" && r.CustomerName != "" && r.Province != "" {
+			ensureCustomer(r.CustomerName)
+			custKey := NormalizeCustomerName(r.CustomerName)
+			provKey := NormalizeProvince(r.Province)
+			idx.customerRules[custKey][provKey] = RuleResult{Rule: r, RuleLevel: "campaign"}
 		}
 	}
 
@@ -457,10 +463,12 @@ func BuildRuleIndex(allRules []FreightRule, gr *GlobalRule) *RuleIndex {
 // Find 从索引中 O(1) 查找最佳规则
 // 返回值可能为 nil（无匹配规则）
 func (idx *RuleIndex) Find(customer, province string) *RuleResult {
+	custKey := NormalizeCustomerName(customer)
+	provKey := NormalizeProvince(province)
 	// 1. 查找客户规则（含 campaign）
-	if cm, ok := idx.customerRules[customer]; ok {
+	if cm, ok := idx.customerRules[custKey]; ok {
 		// 精确省份匹配
-		if r, ok := cm[province]; ok {
+		if r, ok := cm[provKey]; ok {
 			return &r
 		}
 		// 通配省份匹配
@@ -469,7 +477,7 @@ func (idx *RuleIndex) Find(customer, province string) *RuleResult {
 		}
 	}
 	// 2. 查找全局规则
-	if r, ok := idx.globalRules[province]; ok {
+	if r, ok := idx.globalRules[provKey]; ok {
 		return &r
 	}
 	if r, ok := idx.globalRules[""]; ok {

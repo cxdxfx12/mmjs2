@@ -70,9 +70,10 @@ func GetAllProvinceSurcharges() ([]ProvinceSurcharge, error) {
 
 // GetProvinceSurcharge 根据省份获取加价金额（找不到返回0）
 func GetProvinceSurcharge(province string) float64 {
+	provKey := NormalizeProvince(province)
 	var surcharge float64
 	err := db.DB.QueryRow(`SELECT surcharge FROM global_province_surcharges 
-		WHERE province_name=? LIMIT 1`, province).Scan(&surcharge)
+		WHERE province_name=? LIMIT 1`, provKey).Scan(&surcharge)
 	if err != nil {
 		return 0
 	}
@@ -81,6 +82,7 @@ func GetProvinceSurcharge(province string) float64 {
 
 // SaveProvinceSurcharge 保存省份加价
 func SaveProvinceSurcharge(p *ProvinceSurcharge) (int64, error) {
+	p.ProvinceName = NormalizeProvince(p.ProvinceName)
 	if p.ID > 0 {
 		_, err := db.DB.Exec(`UPDATE global_province_surcharges SET province_name=?, surcharge=?, remark=? WHERE id=?`,
 			p.ProvinceName, p.Surcharge, p.Remark, p.ID)
