@@ -106,11 +106,11 @@ def generate_syso(ico_path, syso_path, arch='386'):
     
     # Root entry 0: RT_ICON (ID 3) -> subdirectory
     rt_icon_name_off = root_size + group_name_size + group_lang_size + group_data_entry_size
-    rsrc += struct.pack('<II', 0x80000000 | 3, 0x80000000 | rt_icon_name_off)
+    rsrc += struct.pack('<II', 3, 0x80000000 | rt_icon_name_off)
     
     # Root entry 1: RT_GROUP_ICON (ID 14) -> subdirectory
     rt_group_name_off = root_size
-    rsrc += struct.pack('<II', 0x80000000 | 14, 0x80000000 | rt_group_name_off)
+    rsrc += struct.pack('<II', 14, 0x80000000 | rt_group_name_off)
     
     assert len(rsrc) == root_size
     
@@ -118,7 +118,7 @@ def generate_syso(ico_path, syso_path, arch='386'):
     rsrc += struct.pack('<IIHHHH', 0, 0, 0, 0, 0, 1)  # 1 ID entry
     # Entry: ID 1 -> lang subdirectory
     group_lang_off = rt_group_name_off + group_name_size
-    rsrc += struct.pack('<II', 0x80000000 | 1, 0x80000000 | group_lang_off)
+    rsrc += struct.pack('<II', 1, 0x80000000 | group_lang_off)
     
     assert len(rsrc) == rt_group_name_off + group_name_size
     
@@ -126,7 +126,7 @@ def generate_syso(ico_path, syso_path, arch='386'):
     rsrc += struct.pack('<IIHHHH', 0, 0, 0, 0, 0, 1)
     # Entry: 0x0409 -> data entry
     group_data_entry_off = group_lang_off + group_lang_size
-    rsrc += struct.pack('<II', 0x80000000 | 0x0409, group_data_entry_off)
+    rsrc += struct.pack('<II', 0x0409, group_data_entry_off)
     
     assert len(rsrc) == group_lang_off + group_lang_size
     
@@ -145,7 +145,7 @@ def generate_syso(ico_path, syso_path, arch='386'):
     for i in range(num_images):
         # Entry: ID (i+1) -> lang subdirectory
         lang_off = icon_lang_base + i * 24
-        rsrc += struct.pack('<II', 0x80000000 | (i + 1), 0x80000000 | lang_off)
+        rsrc += struct.pack('<II', i + 1, 0x80000000 | lang_off)
     
     assert len(rsrc) == rt_icon_name_off + icon_name_size
     
@@ -154,7 +154,7 @@ def generate_syso(ico_path, syso_path, arch='386'):
         rsrc += struct.pack('<IIHHHH', 0, 0, 0, 0, 0, 1)
         # Entry: 0x0409 -> data entry
         data_entry_off = icon_data_entry_base + i * 16
-        rsrc += struct.pack('<II', 0x80000000 | 0x0409, data_entry_off)
+        rsrc += struct.pack('<II', 0x0409, data_entry_off)
     
     assert len(rsrc) == icon_lang_base + icon_lang_size
     
