@@ -83,6 +83,7 @@
         </div>
       </div>
     </el-container>
+    <KnowledgeAI />
   </el-container>
 </template>
 
@@ -91,6 +92,7 @@ import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { HomeFilled, Coin, Setting, Clock, Key, Tools, UserFilled, SwitchButton, Loading, Aim } from '@element-plus/icons-vue'
+import KnowledgeAI from '@/components/KnowledgeAI.vue'
 
 const route = useRoute()
 const router = useRouter()

@@ -210,7 +210,7 @@
                       <div class="avgweight-cell" v-if="avgWeightRule">
                         <div class="aw-top">
                           <span class="aw-base">基准 {{ avgWeightRule.base_weight }}kg</span>
-                          <el-switch :model-value="avgWeightRule.is_enabled===1" size="small" @change="toggleAvgWeightRule" />
+                          <el-switch :model-value="Number(avgWeightRule.is_enabled)===1" size="small" @change="(val: boolean) => toggleAvgWeightRule(val)" />
                         </div>
                         <div class="aw-bottom">
                           步长 <span class="aw-step">{{ avgWeightRule.step_weight }}kg</span>
@@ -988,11 +988,16 @@ async function loadCustomerRules(name: string) {
 
 async function toggleAvgWeightRule(enabled: boolean) {
   if (!avgWeightRule.value) return
+  const oldEnabled = Number(avgWeightRule.value.is_enabled)
+  avgWeightRule.value.is_enabled = enabled ? 1 : 0
   try {
-    await store.toggleAvgWeight(avgWeightRule.value.id, enabled ? 1 : 0)
-    avgWeightRule.value.is_enabled = enabled ? 1 : 0
+    const result = await store.toggleAvgWeight(avgWeightRule.value.id, enabled ? 1 : 0)
+    if (!result || result.ok === false) {
+      throw new Error('保存失败')
+    }
     ElMessage.success(enabled ? '已启用拉均重' : '已停用拉均重')
   } catch (e) {
+    avgWeightRule.value.is_enabled = oldEnabled
     ElMessage.error('操作失败')
   }
 }
