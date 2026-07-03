@@ -25,12 +25,12 @@ func GetBracketsByRuleID(ruleID int64) ([]WeightBracket, error) {
 
 // SaveBrackets 保存规则的重量区间（先删后插）
 func SaveBrackets(ruleID int64, brackets []WeightBracket) error {
-	_, err := db.DB.Exec("DELETE FROM freight_weight_brackets WHERE rule_id=?", ruleID)
+	_, err := db.WriteExec("DELETE FROM freight_weight_brackets WHERE rule_id=?", ruleID)
 	if err != nil {
 		return err
 	}
 	for _, b := range brackets {
-		_, err = db.DB.Exec(`INSERT INTO freight_weight_brackets 
+		_, err = db.WriteExec(`INSERT INTO freight_weight_brackets 
 			(rule_id, weight_from, weight_to, calc_type, fixed_price, first_weight, first_price, cont_price, cont_mode, sort_order)
 			VALUES (?,?,?,?,?,?,?,?,?,?)`,
 			ruleID, b.WeightFrom, b.WeightTo, b.CalcType, b.FixedPrice,

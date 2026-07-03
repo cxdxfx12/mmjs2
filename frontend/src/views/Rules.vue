@@ -233,7 +233,7 @@
                     </template>
                   </el-table-column>
                   <el-table-column label="启用" width="60" align="center" fixed="right">
-                    <template #default="{row}"><el-switch :model-value="row.is_enabled===1" size="small" @change="toggleRule(row)"/></template>
+                    <template #default="{row}"><el-switch :model-value="Number(row.is_enabled)===1" size="small" @change="(val: boolean) => toggleRule(row, val)"/></template>
                   </el-table-column>
                   <el-table-column label="操作" width="110" align="center" fixed="right">
                     <template #default="{row}">
@@ -312,7 +312,7 @@
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="启用" width="60"><template #default="{row}"><el-switch :model-value="row.is_enabled===1" size="small" @change="toggleRule(row)"/></template></el-table-column>
+              <el-table-column label="启用" width="60"><template #default="{row}"><el-switch :model-value="Number(row.is_enabled)===1" size="small" @change="(val: boolean) => toggleRule(row, val)"/></template></el-table-column>
               <el-table-column label="备注" min-width="100" show-overflow-tooltip><template #default="{row}">{{ row.remark }}</template></el-table-column>
               <el-table-column label="操作" width="120" fixed="right">
                 <template #default="{row}">
@@ -824,10 +824,18 @@ async function confirmAddCustomer() {
 }
 
 async function handleDeleteCustomer(name: string) {
-  await store.deleteCustomer(name)
-  ElMessage.success(`已删除客户「${name}」及其所有规则`)
-  if (activeCustomer.value === name) { activeCustomer.value = ''; customerRules.value = [] }
-  await loadCustomers()
+  try {
+    const result = await store.deleteCustomer(name)
+    if (result.ok !== false) {
+      ElMessage.success(`已删除客户「${name}」及其所有规则`)
+      if (activeCustomer.value === name) { activeCustomer.value = ''; customerRules.value = [] }
+      await loadCustomers()
+    } else {
+      ElMessage.error(result.error || '删除失败')
+    }
+  } catch {
+    ElMessage.error('删除失败')
+  }
 }
 
 async function handleImport(uploadFile: any) {
@@ -1064,28 +1072,49 @@ async function handleDeleteRule(id: number) {
 
 async function batchDelete() {
   if (selectedRuleIds.value.length === 0) return
-  await store.deleteRulesBatch(selectedRuleIds.value)
-  ElMessage.success(`已删除 ${selectedRuleIds.value.length} 条规则`)
-  await loadCustomers()
-  if (activeCustomer.value) loadCustomerRules(activeCustomer.value)
+  try {
+    const result = await store.deleteRulesBatch(selectedRuleIds.value)
+    if (result.ok !== false) {
+      ElMessage.success(`已删除 ${selectedRuleIds.value.length} 条规则`)
+      await loadCustomers()
+      if (activeCustomer.value) await loadCustomerRules(activeCustomer.value)
+    } else {
+      ElMessage.error(result.error || '删除失败')
+    }
+  } catch {
+    ElMessage.error('删除失败')
+  }
 }
 
-async function toggleRule(row: FreightRule) {
-  const newEnabled = row.is_enabled === 1 ? 0 : 1
-  const oldEnabled = row.is_enabled
+async function toggleRule(row: FreightRule, val: boolean) {
+  const newEnabled = val ? 1 : 0
+  const oldEnabled = Number(row.is_enabled)
   row.is_enabled = newEnabled
   try {
-    await store.saveRule({ 
+    const result = await store.saveRule({ 
       id: row.id,
       rule_type: row.rule_type,
       customer_name: row.customer_name,
       province: row.province,
       cont_mode: row.cont_mode,
       calc_mode: row.calc_mode,
+      zone_id: row.zone_id,
       is_enabled: newEnabled,
+      first_weight: Number(row.first_weight) || 0,
+      first_price: Number(row.first_price) || 0,
+      cont_price: Number(row.cont_price) || 0,
+      min_fee: Number(row.min_fee) || 0,
+      max_fee: Number(row.max_fee) || 0,
+      surcharge: Number(row.surcharge) || 0,
+      campaign_name: row.campaign_name || '',
+      campaign_start: row.campaign_start || '',
+      campaign_end: row.campaign_end || '',
+      remark: row.remark || '',
     })
+    if (!result || !result.id) {
+      throw new Error('保存失败')
+    }
     ElMessage.success(newEnabled ? '已启用' : '已禁用')
-    // 刷新当前客户的规则列表以确认保存成功
     if (activeCustomer.value) {
       await loadCustomerRules(activeCustomer.value)
     }
@@ -1106,6 +1135,7 @@ const ruleForm = reactive({
   min_fee: 0, max_fee: 0, surcharge: 0,
   campaign_name: '', campaign_start: '', campaign_end: '',
   is_enabled: 1, remark: '',
+  zone_id: 0,
 })
 
 function resetRuleForm() {
@@ -1116,6 +1146,7 @@ function resetRuleForm() {
     min_fee: 0, max_fee: 0, surcharge: 0,
     campaign_name: '', campaign_start: '', campaign_end: '',
     is_enabled: 1, remark: '',
+    zone_id: 0,
   })
 }
 

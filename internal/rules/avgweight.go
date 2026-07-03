@@ -79,14 +79,14 @@ func GetAvgWeightRuleByCustomer(customer string) *AvgWeightRule {
 func SaveAvgWeightRule(r *AvgWeightRule) (int64, error) {
 	r.CustomerName = NormalizeCustomerName(r.CustomerName)
 	if r.ID > 0 {
-		_, err := db.DB.Exec(`UPDATE avg_weight_rules SET scope_type=?, customer_name=?, 
+		_, err := db.WriteExec(`UPDATE avg_weight_rules SET scope_type=?, customer_name=?, 
 			base_weight=?, weight_limit=?, step_weight=?, step_price=?, max_markup=?, round_mode=?, 
 			is_enabled=?, remark=? WHERE id=?`,
 			r.ScopeType, r.CustomerName, r.BaseWeight, r.WeightLimit, r.StepWeight, r.StepPrice,
 			r.MaxMarkup, r.RoundMode, r.IsEnabled, r.Remark, r.ID)
 		return r.ID, err
 	}
-	res, err := db.DB.Exec(`INSERT INTO avg_weight_rules 
+	res, err := db.WriteExec(`INSERT INTO avg_weight_rules 
 		(scope_type, customer_name, base_weight, weight_limit, step_weight, step_price, max_markup, round_mode, is_enabled, remark)
 		VALUES (?,?,?,?,?,?,?,?,?,?)`,
 		r.ScopeType, r.CustomerName, r.BaseWeight, r.WeightLimit, r.StepWeight, r.StepPrice,
@@ -99,13 +99,13 @@ func SaveAvgWeightRule(r *AvgWeightRule) (int64, error) {
 
 // DeleteAvgWeightRule 删除拉均重规则
 func DeleteAvgWeightRule(id int64) error {
-	_, err := db.DB.Exec("DELETE FROM avg_weight_rules WHERE id=?", id)
+	_, err := db.WriteExec("DELETE FROM avg_weight_rules WHERE id=?", id)
 	return err
 }
 
 // ToggleAvgWeight 切换拉均重规则启用状态
 func ToggleAvgWeight(id int64, isEnabled int) error {
-	_, err := db.DB.Exec("UPDATE avg_weight_rules SET is_enabled=? WHERE id=?", isEnabled, id)
+	_, err := db.WriteExec("UPDATE avg_weight_rules SET is_enabled=? WHERE id=?", isEnabled, id)
 	return err
 }
 
@@ -116,7 +116,7 @@ func InitDefaultAvgWeightRule() error {
 	if cnt > 0 {
 		return nil
 	}
-	_, err := db.DB.Exec(`INSERT INTO avg_weight_rules 
+	_, err := db.WriteExec(`INSERT INTO avg_weight_rules 
 		(scope_type, customer_name, base_weight, weight_limit, step_weight, step_price, max_markup, round_mode, is_enabled, remark)
 		VALUES ('global', '', 0.5, 1, 0.1, 0.1, 0, 'ceil', 0, '系统默认拉均重规则（默认关闭）')`)
 	return err

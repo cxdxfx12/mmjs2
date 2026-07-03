@@ -79,16 +79,61 @@ func Save(r *FreightRule) (int64, error) {
 	r.CustomerName = NormalizeCustomerName(r.CustomerName)
 	if r.ID > 0 {
 		var existing FreightRule
-		db.DB.QueryRow(`SELECT cont_mode, calc_mode FROM freight_rules WHERE id=?`, r.ID).Scan(&existing.ContMode, &existing.CalcMode)
-		
+		db.DB.QueryRow(`SELECT rule_type, customer_name, province, cont_mode, first_weight, first_price,
+		cont_price, min_fee, max_fee, surcharge, campaign_name, campaign_start, campaign_end,
+		is_enabled, remark, calc_mode, zone_id FROM freight_rules WHERE id=?`, r.ID).Scan(
+		&existing.RuleType, &existing.CustomerName, &existing.Province, &existing.ContMode,
+		&existing.FirstWeight, &existing.FirstPrice, &existing.ContPrice, &existing.MinFee,
+		&existing.MaxFee, &existing.Surcharge, &existing.CampaignName, &existing.CampaignStart,
+		&existing.CampaignEnd, &existing.IsEnabled, &existing.Remark, &existing.CalcMode, &existing.ZoneID)
+
 		if r.ContMode == "" {
 			r.ContMode = existing.ContMode
 		}
 		if r.CalcMode == "" {
 			r.CalcMode = existing.CalcMode
 		}
+		if r.ZoneID == 0 {
+			r.ZoneID = existing.ZoneID
+		}
+		if r.RuleType == "" {
+			r.RuleType = existing.RuleType
+		}
+		if r.CustomerName == "" {
+			r.CustomerName = existing.CustomerName
+		}
+		if r.FirstWeight == 0 {
+			r.FirstWeight = existing.FirstWeight
+		}
+		if r.FirstPrice == 0 {
+			r.FirstPrice = existing.FirstPrice
+		}
+		if r.ContPrice == 0 {
+			r.ContPrice = existing.ContPrice
+		}
+		if r.MinFee == 0 {
+			r.MinFee = existing.MinFee
+		}
+		if r.MaxFee == 0 {
+			r.MaxFee = existing.MaxFee
+		}
+		if r.Surcharge == 0 {
+			r.Surcharge = existing.Surcharge
+		}
+		if r.CampaignName == "" {
+			r.CampaignName = existing.CampaignName
+		}
+		if r.CampaignStart == "" {
+			r.CampaignStart = existing.CampaignStart
+		}
+		if r.CampaignEnd == "" {
+			r.CampaignEnd = existing.CampaignEnd
+		}
+		if r.Remark == "" {
+			r.Remark = existing.Remark
+		}
 
-		_, err := db.DB.Exec(`UPDATE freight_rules SET rule_type=?,customer_name=?,province=?,cont_mode=?,
+		_, err := db.WriteExec(`UPDATE freight_rules SET rule_type=?,customer_name=?,province=?,cont_mode=?,
 			first_weight=?,first_price=?,cont_price=?,min_fee=?,max_fee=?,surcharge=?,
 			campaign_name=?,campaign_start=?,campaign_end=?,is_enabled=?,remark=?,
 			calc_mode=?, zone_id=?,
@@ -102,13 +147,16 @@ func Save(r *FreightRule) (int64, error) {
 		}
 		if r.CalcMode == "bracket" && len(r.Brackets) > 0 {
 			SaveBrackets(r.ID, r.Brackets)
+		} else if existing.CalcMode == "bracket" && r.CalcMode != "bracket" {
+			// 从 bracket 切换到 simple 时，清除旧的重量区间数据
+			db.WriteExec("DELETE FROM freight_weight_brackets WHERE rule_id=?", r.ID)
 		}
 		return r.ID, err
 	}
 	if r.CalcMode == "" {
 		r.CalcMode = "simple"
 	}
-	res, err := db.DB.Exec(`INSERT INTO freight_rules (rule_type,customer_name,province,cont_mode,
+	res, err := db.WriteExec(`INSERT INTO freight_rules (rule_type,customer_name,province,cont_mode,
 		first_weight,first_price,cont_price,min_fee,max_fee,surcharge,
 		campaign_name,campaign_start,campaign_end,is_enabled,remark,calc_mode,zone_id)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -136,8 +184,11 @@ func Delete(id int64) error {
 		return nil
 	}
 	// 先删重量区间
-	db.DB.Exec("DELETE FROM freight_weight_brackets WHERE rule_id=?", id)
-	_, err := db.DB.Exec("DELETE FROM freight_rules WHERE id=?", id)
+	_, err := db.WriteExec("DELETE FROM freight_weight_brackets WHERE rule_id=?", id)
+	if err != nil {
+		return err
+	}
+	_, err = db.WriteExec("DELETE FROM freight_rules WHERE id=?", id)
 	return err
 }
 
@@ -162,9 +213,9 @@ func DeleteByCustomer(customerName string) error {
 	}
 	rows.Close()
 	for _, id := range ids {
-		db.DB.Exec("DELETE FROM freight_weight_brackets WHERE rule_id=?", id)
+		db.WriteExec("DELETE FROM freight_weight_brackets WHERE rule_id=?", id)
 	}
-	_, err := db.DB.Exec("DELETE FROM freight_rules WHERE customer_name=? AND rule_type IN ('customer','campaign')", custKey)
+	_, err := db.WriteExec("DELETE FROM freight_rules WHERE customer_name=? AND rule_type IN ('customer','campaign')", custKey)
 	return err
 }
 

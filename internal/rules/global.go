@@ -33,7 +33,7 @@ func GetGlobalRules() *GlobalRule {
 }
 
 func SaveGlobalRules(g *GlobalRule) error {
-	_, err := db.DB.Exec(`UPDATE global_rules SET default_first_weight=?,default_first_price=?,
+	_, err := db.WriteExec(`UPDATE global_rules SET default_first_weight=?,default_first_price=?,
 		default_cont_price=?,default_min_fee=?,no_weight_price=?,markup_fixed=?,markup_percent=?,
 		updated_at=datetime('now','localtime') WHERE id=1`,
 		g.DefaultFirstWeight, g.DefaultFirstPrice, g.DefaultContPrice,
@@ -84,11 +84,11 @@ func GetProvinceSurcharge(province string) float64 {
 func SaveProvinceSurcharge(p *ProvinceSurcharge) (int64, error) {
 	p.ProvinceName = NormalizeProvince(p.ProvinceName)
 	if p.ID > 0 {
-		_, err := db.DB.Exec(`UPDATE global_province_surcharges SET province_name=?, surcharge=?, remark=? WHERE id=?`,
+		_, err := db.WriteExec(`UPDATE global_province_surcharges SET province_name=?, surcharge=?, remark=? WHERE id=?`,
 			p.ProvinceName, p.Surcharge, p.Remark, p.ID)
 		return p.ID, err
 	}
-	res, err := db.DB.Exec(`INSERT INTO global_province_surcharges (province_name, surcharge, remark) VALUES (?,?,?)`,
+	res, err := db.WriteExec(`INSERT INTO global_province_surcharges (province_name, surcharge, remark) VALUES (?,?,?)`,
 		p.ProvinceName, p.Surcharge, p.Remark)
 	if err != nil {
 		return 0, err
@@ -98,6 +98,6 @@ func SaveProvinceSurcharge(p *ProvinceSurcharge) (int64, error) {
 
 // DeleteProvinceSurcharge 删除省份加价
 func DeleteProvinceSurcharge(id int64) error {
-	_, err := db.DB.Exec("DELETE FROM global_province_surcharges WHERE id=?", id)
+	_, err := db.WriteExec("DELETE FROM global_province_surcharges WHERE id=?", id)
 	return err
 }

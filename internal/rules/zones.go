@@ -75,20 +75,20 @@ func GetZoneByName(zoneName string) (*Zone, error) {
 // SaveZone 保存区域（新增或更新）
 func SaveZone(z *Zone) (int64, error) {
 	if z.ID > 0 {
-		_, err := db.DB.Exec(`UPDATE freight_zones SET zone_name=?, zone_order=?, remark=? WHERE id=?`,
+		_, err := db.WriteExec(`UPDATE freight_zones SET zone_name=?, zone_order=?, remark=? WHERE id=?`,
 			z.ZoneName, z.ZoneOrder, z.Remark, z.ID)
 		if err != nil {
 			return 0, err
 		}
 		// 更新省份：先删后插
-		db.DB.Exec("DELETE FROM freight_zone_provinces WHERE zone_id=?", z.ID)
+		db.WriteExec("DELETE FROM freight_zone_provinces WHERE zone_id=?", z.ID)
 		for _, p := range z.Provinces {
 			provName := NormalizeProvince(p)
-			db.DB.Exec("INSERT INTO freight_zone_provinces (zone_id, province_name) VALUES (?, ?)", z.ID, provName)
+			db.WriteExec("INSERT INTO freight_zone_provinces (zone_id, province_name) VALUES (?, ?)", z.ID, provName)
 		}
 		return z.ID, nil
 	}
-	res, err := db.DB.Exec(`INSERT INTO freight_zones (zone_name, zone_order, remark) VALUES (?,?,?)`,
+	res, err := db.WriteExec(`INSERT INTO freight_zones (zone_name, zone_order, remark) VALUES (?,?,?)`,
 		z.ZoneName, z.ZoneOrder, z.Remark)
 	if err != nil {
 		return 0, err
@@ -96,18 +96,18 @@ func SaveZone(z *Zone) (int64, error) {
 	id, _ := res.LastInsertId()
 	for _, p := range z.Provinces {
 		provName := NormalizeProvince(p)
-		db.DB.Exec("INSERT INTO freight_zone_provinces (zone_id, province_name) VALUES (?, ?)", id, provName)
+		db.WriteExec("INSERT INTO freight_zone_provinces (zone_id, province_name) VALUES (?, ?)", id, provName)
 	}
 	return id, nil
 }
 
 // DeleteZone 删除区域
 func DeleteZone(id int64) error {
-	_, err := db.DB.Exec("DELETE FROM freight_zone_provinces WHERE zone_id=?", id)
+	_, err := db.WriteExec("DELETE FROM freight_zone_provinces WHERE zone_id=?", id)
 	if err != nil {
 		return err
 	}
-	_, err = db.DB.Exec("DELETE FROM freight_zones WHERE id=?", id)
+	_, err = db.WriteExec("DELETE FROM freight_zones WHERE id=?", id)
 	return err
 }
 
@@ -285,7 +285,7 @@ func (s ZonePriceScheme) ToBrackets(contMode string) []WeightBracket {
 			WeightFrom:  30.0,
 			WeightTo:    0, // 0 = 不设上限
 			CalcType:    "first_cont",
-			FirstWeight: 30.0,
+			FirstWeight: 3.0,
 			FirstPrice:  s.First30up,
 			ContPrice:   s.Cont30up,
 			ContMode:    contMode,
