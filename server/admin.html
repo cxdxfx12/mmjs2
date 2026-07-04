@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>喵喵云结算 · 授权管理后台</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;color:#333}
+.header{background:linear-gradient(135deg,#4472C4,#2B579A);color:#fff;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.header h1{font-size:20px;font-weight:600}
+.header .user{font-size:14px;opacity:.9;cursor:pointer}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.stat-card .label{font-size:13px;color:#909399;margin-bottom:8px}
+.stat-card .value{font-size:28px;font-weight:700;color:#303133}
+.stat-card .value.green{color:#67c23a}
+.stat-card .value.blue{color:#4472C4}
+.stat-card .value.orange{color:#e6a23c}
+.stat-card .value.red{color:#f56c6c}
+.toolbar{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.toolbar input,.toolbar select,.toolbar button{padding:8px 14px;border:1px solid #dcdfe6;border-radius:6px;font-size:14px;outline:none}
+.toolbar input:focus,.toolbar select:focus{border-color:#4472C4}
+.toolbar button{cursor:pointer;border:none;font-weight:500}
+.btn-primary{background:#4472C4;color:#fff}
+.btn-primary:hover{background:#3a6ab5}
+.btn-danger{background:#f56c6c;color:#fff}
+.btn-danger:hover{background:#e04545}
+.btn-default{background:#fff;border:1px solid #dcdfe6;color:#606266}
+.btn-default:hover{color:#4472C4;border-color:#4472C4}
+.btn-success{background:#67c23a;color:#fff}
+.btn-success:hover{background:#5daf34}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+th{background:#f5f7fa;padding:12px 14px;text-align:left;font-weight:600;font-size:13px;color:#606266;border-bottom:1px solid #ebeef5}
+td{padding:10px 14px;font-size:13px;border-bottom:1px solid #ebeef5;color:#303133}
+tr:hover{background:#f5f7fa}
+.tag{display:inline-block;padding:2px 10px;border-radius:4px;font-size:12px;font-weight:500}
+.tag-active{background:#e8f5e9;color:#67c23a}
+.tag-expired{background:#fef0f0;color:#f56c6c}
+.tag-revoked{background:#fdf6ec;color:#e6a23c}
+.pagination{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:16px}
+.pagination button{min-width:36px;height:36px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;font-size:13px}
+.pagination button:hover{border-color:#4472C4;color:#4472C4}
+.pagination button.active{background:#4472C4;color:#fff;border-color:#4472C4}
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:1000;justify-content:center;align-items:center}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:12px;width:480px;max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal-header{padding:16px 20px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center}
+.modal-header h3{font-size:18px;font-weight:600}
+.modal-close{cursor:pointer;font-size:22px;color:#909399;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:4px}
+.modal-close:hover{background:#f0f2f5;color:#303133}
+.modal-body{padding:20px}
+.modal-footer{padding:12px 20px;border-top:1px solid #ebeef5;display:flex;justify-content:flex-end;gap:8px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;margin-bottom:4px;font-size:13px;font-weight:500;color:#606266}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px 12px;border:1px solid #dcdfe6;border-radius:6px;font-size:14px;outline:none}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:#4472C4}
+.form-group textarea{resize:vertical;min-height:80px}
+.form-group .hint{font-size:12px;color:#909399;margin-top:4px}
+.license-box{background:#f5f7fa;border:1px solid #e4e7ed;border-radius:6px;padding:12px;font-family:'Courier New',monospace;font-size:12px;word-break:break-all;max-height:200px;overflow-y:auto;margin-top:8px}
+.copy-btn{cursor:pointer;color:#4472C4;font-size:12px;margin-left:8px;text-decoration:underline}
+.empty{text-align:center;padding:60px 20px;color:#909399}
+.error{background:#fef0f0;color:#f56c6c;padding:8px 14px;border-radius:6px;margin-bottom:12px;font-size:13px;display:none}
+.success{background:#e8f5e9;color:#67c23a;padding:8px 14px;border-radius:6px;margin-bottom:12px;font-size:13px;display:none}
+.toast{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:8px;font-size:14px;color:#fff;z-index:9999;animation:slideIn .3s ease;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.toast.success{background:#67c23a}
+.toast.error{background:#f56c6c}
+.toast.info{background:#4472C4}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🔑 喵喵云结算 · 授权管理后台</h1>
+  <div class="user" onclick="logout()" title="退出登录">👤 admin</div>
+</div>
+<div class="container">
+  <!-- 统计卡片 -->
+  <div class="stats">
+    <div class="stat-card"><div class="label">总授权数</div><div class="value blue" id="stat-total">-</div></div>
+    <div class="stat-card"><div class="label">有效授权</div><div class="value green" id="stat-active">-</div></div>
+    <div class="stat-card"><div class="label">即将到期(7天)</div><div class="value orange" id="stat-expiring">-</div></div>
+    <div class="stat-card"><div class="label">已吊销</div><div class="value red" id="stat-revoked">-</div></div>
+  </div>
+
+  <!-- 工具栏 -->
+  <div class="toolbar">
+    <input type="text" id="searchInput" placeholder="搜索机器码或客户名..." style="width:260px">
+    <select id="statusFilter">
+      <option value="">全部状态</option>
+      <option value="1">有效</option>
+      <option value="0">已吊销</option>
+    </select>
+    <button class="btn-default" onclick="loadList()">🔍 搜索</button>
+    <div style="flex:1"></div>
+    <button class="btn-primary" onclick="showIssueModal()">➕ 签发新授权</button>
+    <button class="btn-default" onclick="loadList()">🔄 刷新</button>
+  </div>
+
+  <!-- 表格 -->
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>机器码</th><th>客户名称</th><th>联系方式</th>
+        <th>签发时间</th><th>到期时间</th><th>天数</th><th>状态</th><th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+  <div id="emptyHint" class="empty" style="display:none">暂无授权记录</div>
+
+  <!-- 分页 -->
+  <div class="pagination" id="pagination"></div>
+</div>
+
+<!-- 签发授权弹窗 -->
+<div class="modal-overlay" id="issueModal">
+  <div class="modal">
+    <div class="modal-header"><h3>签发新授权</h3><div class="modal-close" onclick="closeModal('issueModal')">×</div></div>
+    <div class="modal-body">
+      <div class="error" id="issueError"></div>
+      <div class="success" id="issueSuccess"></div>
+      <div class="form-group">
+        <label>机器码 *</label>
+        <input type="text" id="issueMachineCode" placeholder="如: ABCD-1234-EFGH-5678">
+        <div class="hint">客户端软件上显示的机器码</div>
+      </div>
+      <div class="form-group">
+        <label>客户名称 *</label>
+        <input type="text" id="issueCustomer" placeholder="如: 张三/某某公司">
+      </div>
+      <div class="form-group">
+        <label>联系方式</label>
+        <input type="text" id="issueContact" placeholder="手机号或微信">
+      </div>
+      <div class="form-group">
+        <label>授权时长</label>
+        <select id="issueDuration">
+          <option value="30">30 天</option>
+          <option value="90">3 个月 (90天)</option>
+          <option value="180">6 个月 (180天)</option>
+          <option value="365" selected>1 年 (365天)</option>
+          <option value="7">7 天 (试用)</option>
+          <option value="0">自定义...</option>
+        </select>
+      </div>
+      <div class="form-group" id="customDaysGroup" style="display:none">
+        <label>自定义天数</label>
+        <input type="number" id="issueCustomDays" placeholder="输入天数" min="1" max="3650">
+      </div>
+      <div class="form-group">
+        <label>备注</label>
+        <textarea id="issueRemark" placeholder="选填"></textarea>
+      </div>
+      <div class="license-box" id="issueResult" style="display:none">
+        <strong>授权数据 (license.dat 内容):</strong>
+        <div id="issueLicenseData" style="margin-top:8px"></div>
+        <div style="margin-top:8px">
+          <button class="btn-success" onclick="downloadLicense()" style="margin-right:8px">📥 下载 license.dat</button>
+          <button class="btn-default" onclick="copyToClipboard()">📋 复制内容</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-default" onclick="closeModal('issueModal')">取消</button>
+      <button class="btn-primary" id="btnIssue" onclick="doIssue()">签发授权</button>
+    </div>
+  </div>
+</div>
+
+<!-- 查看授权弹窗 -->
+<div class="modal-overlay" id="viewModal">
+  <div class="modal">
+    <div class="modal-header"><h3>授权详情</h3><div class="modal-close" onclick="closeModal('viewModal')">×</div></div>
+    <div class="modal-body" id="viewContent"></div>
+    <div class="modal-footer">
+      <button class="btn-default" onclick="closeModal('viewModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 登录弹窗 -->
+<div class="modal-overlay show" id="loginModal">
+  <div class="modal" style="width:360px">
+    <div class="modal-header"><h3>管理员登录</h3></div>
+    <div class="modal-body">
+      <div class="error" id="loginError"></div>
+      <div class="form-group"><label>管理密码</label><input type="password" id="loginPwd" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    </div>
+    <div class="modal-footer"><button class="btn-primary" onclick="doLogin()" style="width:100%">登录</button></div>
+  </div>
+</div>
+
+<script>
+// ============ 全局状态 ============
+let TOKEN = localStorage.getItem('yunfei_admin_token') || '';
+let currentPage = 1;
+let lastIssueData = null;
+
+// ============ API 调用 ============
+const API_BASE = ''; // 同目录下 license_api.php
+
+async function api(action, params = {}, method = 'POST') {
+  const url = `${API_BASE}/license_api.php?action=${action}`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (TOKEN) headers['Authorization'] = `Bearer ${TOKEN}`;
+
+  const opts = { method, headers };
+  if (method === 'POST' && Object.keys(params).length > 0) {
+    opts.body = JSON.stringify(params);
+  } else if (method === 'GET') {
+    const qs = new URLSearchParams(params).toString();
+    return fetch(`${url}&${qs}`, opts).then(r => r.json());
+  }
+
+  return fetch(url, opts).then(r => r.json());
+}
+
+// ============ 登录 ============
+if (!TOKEN) {
+  document.getElementById('loginModal').classList.add('show');
+}
+
+async function doLogin() {
+  const pwd = document.getElementById('loginPwd').value;
+  if (!pwd) return showLoginError('请输入密码');
+  // 简单验证：尝试调用 list 接口
+  localStorage.setItem('yunfei_admin_token', pwd);
+  TOKEN = pwd;
+  try {
+    const res = await api('list', { page: 1 }, 'GET');
+    if (res.error) {
+      TOKEN = '';
+      localStorage.removeItem('yunfei_admin_token');
+      showLoginError(res.error);
+      return;
+    }
+    document.getElementById('loginModal').classList.remove('show');
+    loadStats();
+    loadList();
+  } catch(e) {
+    showLoginError('网络错误');
+  }
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function logout() {
+  TOKEN = '';
+  localStorage.removeItem('yunfei_admin_token');
+  location.reload();
+}
+
+// ============ 加载数据 ============
+async function loadStats() {
+  // 加载各状态的总数
+  const [allRes, activeRes, revokedRes] = await Promise.all([
+    api('list', { page: 1, limit: 1 }, 'GET'),
+    api('list', { page: 1, limit: 1, status: 1 }, 'GET'),
+    api('list', { page: 1, limit: 1, status: 0 }, 'GET'),
+  ]);
+  document.getElementById('stat-total').textContent = allRes.total || 0;
+  document.getElementById('stat-active').textContent = activeRes.total || 0;
+  document.getElementById('stat-revoked').textContent = revokedRes.total || 0;
+  // 即将到期: 从有效列表中筛选
+  if (activeRes.list) {
+    const expiring = activeRes.list.filter(l => {
+      const days = Math.ceil((new Date(l.expires_at) - new Date()) / 86400000);
+      return days <= 7 && days >= 0;
+    }).length;
+    document.getElementById('stat-expiring').textContent = expiring;
+  }
+}
+
+async function loadList(page = 1) {
+  currentPage = page;
+  const search = document.getElementById('searchInput').value;
+  const status = document.getElementById('statusFilter').value;
+  const params = { page, search, status };
+  const res = await api('list', params, 'GET');
+
+  const tbody = document.getElementById('tableBody');
+  const empty = document.getElementById('emptyHint');
+
+  if (!res.list || res.list.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+  } else {
+    empty.style.display = 'none';
+    tbody.innerHTML = res.list.map(l => {
+      let statusTag = '';
+      const expired = new Date(l.expires_at) < new Date();
+      if (l.status == 0) statusTag = '<span class="tag tag-revoked">已吊销</span>';
+      else if (expired) statusTag = '<span class="tag tag-expired">已过期</span>';
+      else statusTag = '<span class="tag tag-active">有效</span>';
+
+      return `<tr>
+        <td>${l.id}</td>
+        <td style="font-family:monospace;font-size:12px">${l.machine_code}</td>
+        <td>${l.customer_name}</td>
+        <td>${l.contact_info || '-'}</td>
+        <td>${l.issued_at?.substring(0,10) || '-'}</td>
+        <td>${l.expires_at?.substring(0,10) || '-'}</td>
+        <td>${l.duration_days}天</td>
+        <td>${statusTag}</td>
+        <td>
+          ${l.status == 1 ? `<button class="btn-danger" style="padding:4px 10px;font-size:12px" onclick="doRevoke(${l.id})">吊销</button>` : ''}
+          <button class="btn-default" style="padding:4px 10px;font-size:12px;margin-left:4px" onclick="viewLicense(${l.id})">详情</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // 分页
+  const totalPages = Math.ceil((res.total || 0) / 20);
+  const pag = document.getElementById('pagination');
+  if (totalPages <= 1) { pag.innerHTML = ''; return; }
+  let html = `<button ${page==1?'disabled':''} onclick="loadList(${page-1})">‹</button>`;
+  for (let i = 1; i <= totalPages && i <= 10; i++) {
+    html += `<button class="${i==page?'active':''}" onclick="loadList(${i})">${i}</button>`;
+  }
+  html += `<button ${page==totalPages?'disabled':''} onclick="loadList(${page+1})">›</button>`;
+  pag.innerHTML = html;
+
+  loadStats();
+}
+
+// ============ 签发授权 ============
+function showIssueModal() {
+  document.getElementById('issueModal').classList.add('show');
+  document.getElementById('issueError').style.display = 'none';
+  document.getElementById('issueSuccess').style.display = 'none';
+  document.getElementById('issueResult').style.display = 'none';
+  document.getElementById('issueMachineCode').value = '';
+  document.getElementById('issueCustomer').value = '';
+  document.getElementById('issueContact').value = '';
+  document.getElementById('issueRemark').value = '';
+  document.getElementById('issueDuration').value = '365';
+  document.getElementById('customDaysGroup').style.display = 'none';
+  lastIssueData = null;
+}
+
+document.getElementById('issueDuration').addEventListener('change', function() {
+  document.getElementById('customDaysGroup').style.display = this.value === '0' ? 'block' : 'none';
+});
+
+async function doIssue() {
+  const machineCode = document.getElementById('issueMachineCode').value.trim();
+  const customer = document.getElementById('issueCustomer').value.trim();
+  const contact = document.getElementById('issueContact').value.trim();
+  const remark = document.getElementById('issueRemark').value.trim();
+  let duration = parseInt(document.getElementById('issueDuration').value);
+
+  if (duration === 0) {
+    duration = parseInt(document.getElementById('issueCustomDays').value);
+    if (!duration || duration < 1 || duration > 3650) {
+      showIssueError('自定义天数需在 1-3650 之间');
+      return;
+    }
+  }
+  if (!machineCode) return showIssueError('请输入机器码');
+  if (!customer) return showIssueError('请输入客户名称');
+
+  document.getElementById('btnIssue').disabled = true;
+  document.getElementById('btnIssue').textContent = '签发中...';
+
+  try {
+    const res = await api('issue', { machine_code: machineCode, customer_name: customer, duration_days: duration, contact_info: contact, remark });
+    if (res.error) {
+      showIssueError(res.error);
+    } else {
+      lastIssueData = res;
+      document.getElementById('issueLicenseData').textContent = res.license_data;
+      document.getElementById('issueResult').style.display = 'block';
+      document.getElementById('issueSuccess').textContent = res.message;
+      document.getElementById('issueSuccess').style.display = 'block';
+      document.getElementById('btnIssue').style.display = 'none';
+      loadList();
+      showToast('授权签发成功', 'success');
+    }
+  } catch(e) {
+    showIssueError('网络错误: ' + e.message);
+  } finally {
+    document.getElementById('btnIssue').disabled = false;
+    document.getElementById('btnIssue').textContent = '签发授权';
+  }
+}
+
+function showIssueError(msg) {
+  const el = document.getElementById('issueError');
+  el.textContent = msg;
+  el.style.display = 'block';
+  document.getElementById('issueSuccess').style.display = 'none';
+}
+
+function downloadLicense() {
+  if (!lastIssueData) return;
+  const blob = new Blob([lastIssueData.license_data], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `license_${lastIssueData.machine_code}.dat`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('license.dat 下载成功', 'success');
+}
+
+function copyToClipboard() {
+  if (!lastIssueData) return;
+  navigator.clipboard.writeText(lastIssueData.license_data).then(() => {
+    showToast('已复制到剪贴板', 'success');
+  });
+}
+
+// ============ 吊销 ============
+async function doRevoke(id) {
+  if (!confirm('确定吊销该授权吗？吊销后客户端将无法使用。')) return;
+  const res = await api('revoke', { id });
+  if (res.ok) {
+    showToast('已吊销', 'info');
+    loadList();
+  } else {
+    showToast(res.error || '操作失败', 'error');
+  }
+}
+
+// ============ 查看详情 ============
+async function viewLicense(id) {
+  document.getElementById('viewModal').classList.add('show');
+  const res = await api('get_license', { id }, 'GET');
+  const content = document.getElementById('viewContent');
+  if (res.error) {
+    content.innerHTML = `<p style="color:#f56c6c">${res.error}</p>`;
+  } else {
+    content.innerHTML = `
+      <p><strong>机器码:</strong> <code>${res.machine_code}</code></p>
+      <p><strong>客户:</strong> ${res.customer_name}</p>
+      <p><strong>到期:</strong> ${res.expires_at}</p>
+      <div class="license-box" style="margin-top:12px">${res.license_data}</div>
+      <div style="margin-top:8px">
+        <button class="btn-success" onclick="downloadViewLicense('${res.license_data.replace(/'/g, "\\'")}', '${res.filename}')">📥 下载</button>
+      </div>`;
+  }
+}
+
+function downloadViewLicense(data, filename) {
+  const blob = new Blob([data], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============ 弹窗 ============
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+function showToast(msg, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// ============ 初始加载 ============
+if (TOKEN) {
+  loadStats();
+  loadList();
+}
+</script>
+</body>
+</html>

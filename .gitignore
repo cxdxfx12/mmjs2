@@ -1,0 +1,49 @@
+# 编译产物
+*.exe
+*.exe~
+yunfei
+yunfei.exe
+rsrc_windows_amd64.syso
+*.syso
+
+# 构建目录
+build/
+dist/
+
+# 测试
+_test/
+test_data/
+
+# Excel数据文件
+*.xlsx
+*.xls
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+
+# 系统文件
+.DS_Store
+data.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 私钥和授权
+*.key
+!client_public.key
+!server_private.key
+
+# 临时文件
+*.log
+*.tmp
+tmp/
+temp/
+*.swp
+*~
+
