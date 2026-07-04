@@ -260,7 +260,8 @@ func (a *App) CopyCustomerRules(fromCustomer, toCustomer string) int {
 }
 
 // ImportCustomerRules 批量导入客户规则
-// 新模板列序: 客户名称|省份|计费模式|续重模式|首重|首重单价|续重单价|保底价|最高价|附加费|区域名称|规则类型|启用|备注
+// 简单模板（1列）: 客户名称 —— 自动用默认规则参数创建客户规则
+// 新模板（14+列）: 客户名称|省份|计费模式|续重模式|首重|首重单价|续重单价|保底价|最高价|附加费|区域名称|规则类型|启用|备注
 // 兼容旧模板（9列）: 客户名称|省份|续重模式|首重|首重单价|续重单价|保底价|最高价|附加费
 func (a *App) ImportCustomerRules(records [][]string) (int, string) {
 	if len(records) < 2 {
@@ -271,11 +272,31 @@ func (a *App) ImportCustomerRules(records [][]string) (int, string) {
 		if i == 0 {
 			continue
 		}
-		if len(row) < 4 {
+		if len(row) < 1 {
 			continue
 		}
 		customerName := row[0]
 		if customerName == "" {
+			continue
+		}
+
+		// 只有客户名称一列 → 简单模式：用默认六区价格表生成客户规则
+		if len(row) == 1 || (len(row) == 2 && row[1] == "") {
+			priceTable := rules.GetSamplePriceTable()
+			zoneRules, err := rules.GenerateZoneRules(customerName, priceTable, "actual_weight", "bracket")
+			if err != nil {
+				continue
+			}
+			for j := range zoneRules {
+				zoneRules[j].Remark = "批量导入"
+				if _, err := rules.Save(&zoneRules[j]); err == nil {
+					count++
+				}
+			}
+			continue
+		}
+
+		if len(row) < 4 {
 			continue
 		}
 

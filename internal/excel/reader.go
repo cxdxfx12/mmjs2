@@ -111,7 +111,7 @@ func ReadPreview(filePath string) (*ExcelPreview, error) {
 }
 
 // detectColumns 精确匹配列名
-// 只识别：业务时间、运单号、结算重量、目的省份、体积重、客户、集包网点
+// 只识别：业务时间、运单号、结算重量、目的省份、体积重、客户(或结算对象)、集包网点
 func detectColumns(header []string) map[string]int {
 	m := make(map[string]int)
 	for i, h := range header {
@@ -127,7 +127,7 @@ func detectColumns(header []string) map[string]int {
 			m["province"] = i
 		case "体积重":
 			m["vol_weight"] = i
-		case "客户":
+		case "客户", "结算对象":
 			m["customer"] = i
 		case "集包网点":
 			m["package_station"] = i

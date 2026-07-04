@@ -5,6 +5,31 @@ import (
 	"yunfei/internal/db"
 )
 
+func GetDefaultRule() *FreightRule {
+	var def FreightRule
+	var zoneID sql.NullInt64
+	var zoneName sql.NullString
+	db.DB.QueryRow(`SELECT r.id,r.rule_type,r.customer_name,r.province,r.cont_mode,r.first_weight,r.first_price,r.cont_price,
+		r.min_fee,r.max_fee,r.surcharge,r.campaign_name,r.campaign_start,r.campaign_end,r.is_enabled,r.remark,r.created_at,r.updated_at,
+		r.calc_mode, r.zone_id, z.zone_name
+		FROM freight_rules r
+		LEFT JOIN freight_zones z ON r.zone_id = z.id
+		WHERE r.rule_type='default' LIMIT 1`).Scan(
+		&def.ID, &def.RuleType, &def.CustomerName, &def.Province, &def.ContMode,
+		&def.FirstWeight, &def.FirstPrice, &def.ContPrice, &def.MinFee, &def.MaxFee, &def.Surcharge,
+		&def.CampaignName, &def.CampaignStart, &def.CampaignEnd, &def.IsEnabled, &def.Remark, &def.CreatedAt, &def.UpdatedAt,
+		&def.CalcMode, &zoneID, &zoneName)
+	if def.CalcMode == "" {
+		def.CalcMode = "simple"
+		def.ContMode = "full_kg"
+		def.FirstWeight = 1.0
+		def.FirstPrice = 5.0
+		def.ContPrice = 2.0
+		def.IsEnabled = 1
+	}
+	return &def
+}
+
 func GetAll() ([]FreightRule, error) {
 	rows, err := db.DB.Query(`SELECT r.id,r.rule_type,r.customer_name,r.province,r.cont_mode,r.first_weight,r.first_price,r.cont_price,
 		r.min_fee,r.max_fee,r.surcharge,r.campaign_name,r.campaign_start,r.campaign_end,r.is_enabled,r.remark,r.created_at,r.updated_at,

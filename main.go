@@ -521,31 +521,24 @@ func main() {
 	mux.HandleFunc("/api/customers/template", func(w http.ResponseWriter, r *http.Request) {
 		tf := excelize.NewFile()
 		sheet := tf.GetSheetName(0)
-		headers := []string{"客户名称", "省份(空=全国)", "计费模式(simple/bracket)", "续重模式(full_kg/hundred_gram)",
-			"首重(kg)", "首重单价(元)", "续重单价(元)", "保底价(元)", "最高价(元)", "附加费(元)",
-			"区域名称", "规则类型(customer/campaign)", "启用(1/0)", "备注"}
+		headers := []string{"客户名称"}
 		for i, h := range headers {
 			cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 			tf.SetCellValue(sheet, cell, h)
 		}
-		// 示例行
-		example := []string{"示例客户A", "广东", "simple", "full_kg", "1", "5", "2", "0", "0", "0", "", "customer", "1", "批量导入"}
+		example := []string{"示例客户A"}
 		for i, v := range example {
 			cell, _ := excelize.CoordinatesToCellName(i+1, 2)
 			tf.SetCellValue(sheet, cell, v)
 		}
-		example2 := []string{"示例客户B", "新疆", "simple", "hundred_gram", "1", "8", "1.5", "0", "0", "0", "", "customer", "1", "百克续重"}
+		example2 := []string{"示例客户B"}
 		for i, v := range example2 {
 			cell, _ := excelize.CoordinatesToCellName(i+1, 3)
 			tf.SetCellValue(sheet, cell, v)
 		}
-		// 设置列宽
-		for i := 0; i < len(headers); i++ {
-			col, _ := excelize.ColumnNumberToName(i + 1)
-			tf.SetColWidth(sheet, col, col, 18)
-		}
+		tf.SetColWidth(sheet, "A", "A", 25)
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-		w.Header().Set("Content-Disposition", `attachment; filename="客户规则导入模板.xlsx"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="客户导入模板.xlsx"`)
 		tf.Write(w)
 	})
 	// 文件上传（支持单文件和多文件）
