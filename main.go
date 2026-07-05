@@ -1189,8 +1189,15 @@ func main() {
 	port = ":" + port
 
 	// 单实例检测：如果已有实例在跑，直接打开浏览器并退出
-	if existing, err := net.DialTimeout("tcp", "127.0.0.1"+port, 200*time.Millisecond); err == nil {
-		existing.Close()
+	instanceFound := false
+	for _, addr := range []string{"127.0.0.1" + port, "localhost" + port, "[::1]" + port} {
+		if existing, err := net.DialTimeout("tcp", addr, 200*time.Millisecond); err == nil {
+			existing.Close()
+			instanceFound = true
+			break
+		}
+	}
+	if instanceFound {
 		log.Println("♻️  已有实例在运行，复用它...")
 		if os.Getenv("NO_BROWSER") == "" {
 			openBrowser("http://localhost" + port)
@@ -1206,7 +1213,13 @@ func main() {
 		}()
 	}
 
-	log.Fatal(http.ListenAndServe(port, handler))
+	if err := http.ListenAndServe(port, handler); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "address already in use") || strings.Contains(strings.ToLower(err.Error()), "only one usage") {
+			log.Printf("⚠️  端口 %s 已被占用，当前实例已退出", port)
+			return
+		}
+		log.Fatal(err)
+	}
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

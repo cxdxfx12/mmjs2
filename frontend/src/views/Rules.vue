@@ -379,18 +379,20 @@
           </el-col>
         </el-row>
         <el-row :gutter="16">
-          <el-col :span="12">
+          <el-col :span="24">
             <el-form-item label="续重模式">
-              <el-select v-model="ruleForm.cont_mode" style="width:100%">
-                <el-option label="实际重量" value="actual_weight"/>
-                <el-option label="整kg续重" value="full_kg"/>
-                <el-option label="百克续重" value="hundred_gram"/>
-              </el-select>
+              <el-radio-group v-model="ruleForm.cont_mode" class="cont-mode-switch">
+                <el-radio-button value="actual_weight">实际重量</el-radio-button>
+                <el-radio-button value="full_kg">全续</el-radio-button>
+                <el-radio-button value="hundred_gram">百克续</el-radio-button>
+              </el-radio-group>
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="首重(kg)">
-              <el-input-number v-model="ruleForm.first_weight" :min="0.01" :step="0.1" :precision="2" style="width:100%" />
+              <el-input-number class="compact-number" v-model="ruleForm.first_weight" :min="0.01" :step="0.1" :precision="2" style="width:90%" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -398,12 +400,12 @@
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="首重单价(元)">
-              <el-input-number v-model="ruleForm.first_price" :min="0" :step="0.1" :precision="2" style="width:100%" />
+              <el-input-number class="compact-number" v-model="ruleForm.first_price" :min="0" :step="0.1" :precision="2" style="width:90%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="续重单价(元)">
-              <el-input-number v-model="ruleForm.cont_price" :min="0" :step="0.05" :precision="2" style="width:100%" />
+              <el-input-number class="compact-number" v-model="ruleForm.cont_price" :min="0" :step="0.05" :precision="2" style="width:90%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -646,6 +648,40 @@ async function saveGlobal() {
     if (r.ok) { ElMessage.success('全局规则已保存') } else { ElMessage.error('保存失败') }
   } catch { ElMessage.error('保存失败') }
   finally { savingGlobal.value = false }
+}
+
+// ====== 新增规则默认值 ======
+const ruleDefaultSettings = ref({
+  first_weight: 1,
+  first_price: 5,
+  cont_price: 2,
+  cont_mode: 'full_kg' as string,
+})
+
+async function loadRuleDefaultSettings() {
+  try {
+    const res = await fetch('/api/settings', {
+      headers: { Authorization: `Bearer ${localStorage.getItem('yunfei_token') || ''}` },
+    })
+    const data = await res.json()
+    const firstWeight = Number(data?.first_weight)
+    const firstPrice = Number(data?.first_price)
+    const contPrice = Number(data?.cont_price)
+    const mode = String(data?.mode || 'full_kg')
+    ruleDefaultSettings.value = {
+      first_weight: Number.isFinite(firstWeight) && firstWeight > 0 ? firstWeight : 1,
+      first_price: Number.isFinite(firstPrice) && firstPrice >= 0 ? firstPrice : 5,
+      cont_price: Number.isFinite(contPrice) && contPrice >= 0 ? contPrice : 2,
+      cont_mode: mode === 'hundred_gram' ? 'hundred_gram' : (mode === 'actual_weight' ? 'actual_weight' : 'full_kg'),
+    }
+  } catch {
+    ruleDefaultSettings.value = {
+      first_weight: 1,
+      first_price: 5,
+      cont_price: 2,
+      cont_mode: 'full_kg',
+    }
+  }
 }
 
 // ====== 省份加价 ======
@@ -1177,10 +1213,11 @@ const ruleForm = reactive({
 })
 
 function resetRuleForm() {
+  const defaults = ruleDefaultSettings.value
   Object.assign(ruleForm, {
     id: 0, rule_type: 'customer', customer_name: activeCustomer.value,
-    province: '', calc_mode: 'bracket', cont_mode: 'actual_weight',
-    first_weight: 1, first_price: 5, cont_price: 2,
+    province: '', calc_mode: 'bracket', cont_mode: defaults.cont_mode,
+    first_weight: defaults.first_weight, first_price: defaults.first_price, cont_price: defaults.cont_price,
     min_fee: 0, max_fee: 0, surcharge: 0,
     campaign_name: '', campaign_start: '', campaign_end: '',
     is_enabled: 1, remark: '',
@@ -1188,7 +1225,7 @@ function resetRuleForm() {
   })
 }
 
-function openRuleDlg(rule: FreightRule | null) {
+async function openRuleDlg(rule: FreightRule | null) {
   if (!rule && !activeCustomer.value) {
     ElMessage.warning('请先选择客户，再新增规则')
     return
@@ -1198,6 +1235,7 @@ function openRuleDlg(rule: FreightRule | null) {
     Object.assign(ruleForm, { ...rule })
   } else {
     editingRule.value = null
+    await loadRuleDefaultSettings()
     resetRuleForm()
   }
   ruleDlgVisible.value = true
@@ -1383,6 +1421,7 @@ const PROVINCES = [
 
 onMounted(async () => {
   try { await loadGlobalRules() } catch {}
+  try { await loadRuleDefaultSettings() } catch {}
   try { await loadProvinceSurcharges() } catch {}
   try {
     await loadCustomers()
@@ -1635,6 +1674,9 @@ onBeforeUnmount(() => {
 .aw-help-list li { margin-bottom: 4px; line-height: 1.5; }
 .rule-form-alert { margin-bottom: 14px; }
 .campaign-alert { margin-top: 4px; }
+.cont-mode-switch { display: flex; gap: 6px; flex-wrap: wrap; }
+.cont-mode-switch .el-radio-button { min-width: 86px; text-align: center; }
+.compact-number .el-input__inner { padding: 6px 10px; }
 .aw-important { color: #f56c6c; }
 
 /* 规则弹窗防止标签遮挡与换行 */

@@ -39,6 +39,12 @@ func CalcSingleWithIndexFast(weight float64, customer, province string, idx *rul
 	return doCalcSingle(weight, province, best, gr, bracketMap, provSurchargeMap)
 }
 
+// CalcSingleWithKeys 使用预计算键的最快版本（零字符串分配）
+func CalcSingleWithKeys(weight float64, custKey, provKey string, idx *rules.RuleIndex, gr *rules.GlobalRule, bracketMap map[int64][]rules.WeightBracket, provSurchargeMap map[string]float64) (float64, float64, float64, float64, *rules.RuleResult) {
+	best := idx.FindByKeys(custKey, provKey)
+	return doCalcSingle(weight, provKey, best, gr, bracketMap, provSurchargeMap)
+}
+
 // CalcSingleWithGlobal 计算单笔运费（支持全局保底和加价规则）
 func CalcSingleWithGlobal(weight float64, customer, province string, allRules []rules.FreightRule, gr *rules.GlobalRule) (float64, float64, float64, float64, *rules.RuleResult) {
 	best := rules.FindBestRule(customer, province, allRules)

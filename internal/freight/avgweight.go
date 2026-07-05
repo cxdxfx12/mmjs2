@@ -75,15 +75,17 @@ func calcOneCustomer(customer string, weights []float64, rule *rules.AvgWeightRu
 		stepPrice = 0.1
 	}
 
-	// 过滤超过重量上限的包裹（如果设置了上限）
-	filteredWeights := make([]float64, 0)
+	// 过滤超过重量上限的包裹（原地过滤，零额外内存分配）
+	filteredIdx := 0
 	for _, w := range weights {
 		billW := math.Max(w, 0.01)
 		if weightLimit > 0 && billW > weightLimit {
 			continue
 		}
-		filteredWeights = append(filteredWeights, billW)
+		weights[filteredIdx] = billW
+		filteredIdx++
 	}
+	filteredWeights := weights[:filteredIdx]
 
 	if len(filteredWeights) == 0 {
 		return rules.AvgWeightResult{Customer: customer}
@@ -91,8 +93,8 @@ func calcOneCustomer(customer string, weights []float64, rule *rules.AvgWeightRu
 
 	// 计算平均重量（仅基于过滤后的包裹）
 	totalWeight := 0.0
-	for _, w := range filteredWeights {
-		totalWeight += w
+	for i := 0; i < len(filteredWeights); i++ {
+		totalWeight += filteredWeights[i]
 	}
 	avgWeight := totalWeight / float64(len(filteredWeights))
 	avgWeight = math.Round(avgWeight*1000) / 1000
@@ -106,8 +108,8 @@ func calcOneCustomer(customer string, weights []float64, rule *rules.AvgWeightRu
 		ItemCount:   len(filteredWeights),
 	}
 
-	// 平均重量 <= 基准，不加价
-	if avgWeight <= baseWeight {
+	// 平均重量 >= 基准，不加价（低于基准才加价）
+	if avgWeight >= baseWeight {
 		return result
 	}
 

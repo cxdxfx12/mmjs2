@@ -65,17 +65,17 @@
         <el-row :gutter="24">
           <el-col :span="8">
             <el-form-item label="默认首重(kg)">
-              <el-input-number v-model="s.first_weight" :min="0.1" :step="0.1" controls-position="right" style="width:100%" />
+              <el-input-number v-model="s.first_weight" :min="0.1" :step="0.1" controls-position="right" size="small" style="width:80px" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="默认首重单价(元)">
-              <el-input-number v-model="s.first_price" :min="0" :precision="2" controls-position="right" style="width:100%" />
+              <el-input-number v-model="s.first_price" :min="0" :precision="2" controls-position="right" size="small" style="width:80px" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="默认续重单价(元)">
-              <el-input-number v-model="s.cont_price" :min="0" :precision="2" controls-position="right" style="width:100%" />
+              <el-input-number v-model="s.cont_price" :min="0" :precision="2" controls-position="right" size="small" style="width:80px" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -83,6 +83,7 @@
           <el-radio-group v-model="s.mode">
             <el-radio-button value="full_kg">全续（元/kg）</el-radio-button>
             <el-radio-button value="hundred_gram">百克续（元/100g）</el-radio-button>
+            <el-radio-button value="actual_weight">实际重量</el-radio-button>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -203,14 +204,14 @@ onMounted(async()=>{
   }catch{}
   // 加载授权服务器地址
   try {
-    const r2 = await fetch('/api/license/server-info')
+    const r2 = await fetch('/api/license/server-info', { headers: aHeaders() })
     const d2 = await r2.json()
     if(d2.server_url) s.server_url = d2.server_url
     if(d2.backup_server_url) s.backup_server_url = d2.backup_server_url
   }catch{}
   // 加载 API 密钥
   try {
-    const r3 = await fetch('/api/license/api-secret')
+    const r3 = await fetch('/api/license/api-secret', { headers: aHeaders() })
     const d3 = await r3.json()
     if(d3.api_secret) s.api_secret = d3.api_secret
   }catch{}

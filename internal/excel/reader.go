@@ -29,6 +29,10 @@ type RowData struct {
 	CalcMode        string  `json:"calc_mode"`        // simple | bracket
 	ZoneName        string  `json:"zone_name"`         // 所属区域名称
 	AvgWeightMarkup float64 `json:"avg_weight_markup"` // 拉均重加价
+
+	// 预计算的归一化键（避免每行重复计算）
+	CustKey string `json:"-"` // 客户归一化键
+	ProvKey string `json:"-"` // 省份归一化键
 }
 
 // ExcelPreview Excel预览信息
@@ -605,14 +609,19 @@ func ReadAllRowsWithProgress(filePath string, progress ProgressCallback) ([]RowD
 			billWeight = 0.01
 		}
 
+		customer := getCol(row, colMap["customer"])
+		province := rules.NormalizeProvince(getCol(row, colMap["province"]))
 		rd := RowData{
 			BusinessTime:   getColDate(row, colMap["date"]),
 			WaybillNo:      getCol(row, colMap["waybill"]),
 			Weight:         billWeight,
-			Province:       rules.NormalizeProvince(getCol(row, colMap["province"])),
+			Province:       province,
 			VolWeight:      volWeight,
 			PackageStation: getCol(row, colMap["package_station"]),
-			Customer:       getCol(row, colMap["customer"]),
+			Customer:       customer,
+			// 预计算归一化键，避免后续重复计算
+			CustKey: rules.NormalizeCustomerName(customer),
+			ProvKey: rules.NormalizeProvince(province),
 		}
 		data = append(data, rd)
 		count++

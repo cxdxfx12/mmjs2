@@ -177,13 +177,14 @@ func Save(r *FreightRule) (int64, error) {
 		if r.ContPrice == 0 {
 			r.ContPrice = existing.ContPrice
 		}
-		if r.MinFee == 0 {
+		// 使用 -1 作为"未设置"标记，允许将字段重置为 0
+		if r.MinFee < 0 {
 			r.MinFee = existing.MinFee
 		}
-		if r.MaxFee == 0 {
+		if r.MaxFee < 0 {
 			r.MaxFee = existing.MaxFee
 		}
-		if r.Surcharge == 0 {
+		if r.Surcharge < 0 {
 			r.Surcharge = existing.Surcharge
 		}
 		if r.CampaignName == "" {
@@ -260,28 +261,37 @@ func Delete(id int64) error {
 
 // DeleteBatch 批量删除规则
 func DeleteBatch(ids []int64) error {
+	var lastErr error
 	for _, id := range ids {
-		Delete(id)
+		if err := Delete(id); err != nil {
+			lastErr = err
+		}
 	}
-	return nil
+	return lastErr
 }
 
 // DeleteByCustomer 删除指定客户的所有规则
 func DeleteByCustomer(customerName string) error {
 	custKey := NormalizeCustomerName(customerName)
 	// 先获取所有规则ID，再删除区间
-	rows, _ := db.DB.Query("SELECT id FROM freight_rules WHERE customer_name=? AND rule_type IN ('customer','campaign')", custKey)
+	rows, err := db.DB.Query("SELECT id FROM freight_rules WHERE customer_name=? AND rule_type IN ('customer','campaign')", custKey)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
 	var ids []int64
 	for rows.Next() {
 		var id int64
-		rows.Scan(&id)
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
 		ids = append(ids, id)
 	}
-	rows.Close()
 	for _, id := range ids {
 		db.WriteExec("DELETE FROM freight_weight_brackets WHERE rule_id=?", id)
 	}
-	_, err := db.WriteExec("DELETE FROM freight_rules WHERE customer_name=? AND rule_type IN ('customer','campaign')", custKey)
+	_, err = db.WriteExec("DELETE FROM freight_rules WHERE customer_name=? AND rule_type IN ('customer','campaign')", custKey)
 	return err
 }
 
@@ -298,15 +308,19 @@ func GetByCustomer(customerName string) ([]FreightRule, error) {
 	if err != nil {
 		return []FreightRule{}, err
 	}
+	defer rows.Close()
+
 	list := make([]FreightRule, 0)
 	for rows.Next() {
 		var r FreightRule
 		var zoneID sql.NullInt64
 		var zoneName sql.NullString
-		rows.Scan(&r.ID, &r.RuleType, &r.CustomerName, &r.Province, &r.ContMode,
+		if err := rows.Scan(&r.ID, &r.RuleType, &r.CustomerName, &r.Province, &r.ContMode,
 			&r.FirstWeight, &r.FirstPrice, &r.ContPrice, &r.MinFee, &r.MaxFee, &r.Surcharge,
 			&r.CampaignName, &r.CampaignStart, &r.CampaignEnd, &r.IsEnabled, &r.Remark, &r.CreatedAt, &r.UpdatedAt,
-			&r.CalcMode, &zoneID, &zoneName)
+			&r.CalcMode, &zoneID, &zoneName); err != nil {
+			continue
+		}
 		if zoneID.Valid {
 			r.ZoneID = zoneID.Int64
 		}
@@ -318,7 +332,6 @@ func GetByCustomer(customerName string) ([]FreightRule, error) {
 		}
 		list = append(list, r)
 	}
-	rows.Close()
 
 	// 批量加载bracket规则的重量区间（在rows关闭后执行，避免连接死锁）
 	bracketMap, _ := LoadRuleBrackets(list)
@@ -393,6 +406,9 @@ func FindBestRule(customer, province string, allRules []FreightRule) *RuleResult
 		for _, r := range enabled {
 			if r.RuleType == ruleType {
 				if ruleType != "global" && NormalizeCustomerName(r.CustomerName) != custKey {
+					continue
+				}
+				if ruleType == "campaign" && !isCampaignActive(r) {
 					continue
 				}
 				if r.Province != "" && NormalizeProvince(r.Province) == provKey {
@@ -483,19 +499,39 @@ func isCampaignActive(r FreightRule) bool {
 // 为批量计算预建索引，避免每行数据 O(R) 遍历
 
 type RuleIndex struct {
-	// customer -> province -> best rule（已按优先级 campaign > customer 排序）
-	customerRules map[string]map[string]RuleResult
+	// 扁平化存储："客户|省份" -> RuleResult（减少 map 层级，提升查找效率）
+	flatRules map[string]RuleResult
 	// province -> best global rule
 	globalRules map[string]RuleResult
 	// 兜底默认规则
 	defaultResult RuleResult
 }
 
+// makeIndexKey 创建组合键（避免字符串拼接分配）
+func makeIndexKey(customer, province string) string {
+	// 预分配足够长度：客户名 + "|" + 省份名
+	n := len(customer) + 1 + len(province)
+	if n <= 128 {
+		// 小键使用栈分配
+		var buf [128]byte
+		copy(buf[:], customer)
+		buf[len(customer)] = '|'
+		copy(buf[len(customer)+1:], province)
+		return string(buf[:n])
+	}
+	// 大键使用堆分配
+	buf := make([]byte, n)
+	copy(buf, customer)
+	buf[len(customer)] = '|'
+	copy(buf[len(customer)+1:], province)
+	return string(buf)
+}
+
 // BuildRuleIndex 预建规则索引（计算开始时调用一次）
 func BuildRuleIndex(allRules []FreightRule) *RuleIndex {
 	idx := &RuleIndex{
-		customerRules: make(map[string]map[string]RuleResult),
-		globalRules:   make(map[string]RuleResult),
+		flatRules:   make(map[string]RuleResult),
+		globalRules: make(map[string]RuleResult),
 	}
 
 	// 收集所有启用的规则
@@ -509,17 +545,6 @@ func BuildRuleIndex(allRules []FreightRule) *RuleIndex {
 	// 优先级：campaign > customer > global，高优先级覆盖低优先级
 	// 同级别内：精确省份 > 通配省份（空=全国）
 	// 策略：先加载通配（低优先级），再加载精确（高优先级，覆盖通配）
-
-	// 辅助函数：确保客户map存在
-	ensureCustomer := func(cust string) {
-		if cust == "" {
-			return
-		}
-		custKey := NormalizeCustomerName(cust)
-		if idx.customerRules[custKey] == nil {
-			idx.customerRules[custKey] = make(map[string]RuleResult)
-		}
-	}
 
 	// 1) global 规则（最低优先级）
 	// 先通配
@@ -540,20 +565,18 @@ func BuildRuleIndex(allRules []FreightRule) *RuleIndex {
 	// 先通配
 	for _, r := range enabled {
 		if r.RuleType == "customer" && r.CustomerName != "" {
-			ensureCustomer(r.CustomerName)
 			custKey := NormalizeCustomerName(r.CustomerName)
 			if r.Province == "" {
-				idx.customerRules[custKey][""] = RuleResult{Rule: r, RuleLevel: "customer"}
+				idx.flatRules[makeIndexKey(custKey, "")] = RuleResult{Rule: r, RuleLevel: "customer"}
 			}
 		}
 	}
 	// 再精确省份（覆盖通配）
 	for _, r := range enabled {
 		if r.RuleType == "customer" && r.CustomerName != "" && r.Province != "" {
-			ensureCustomer(r.CustomerName)
 			custKey := NormalizeCustomerName(r.CustomerName)
 			provKey := NormalizeProvince(r.Province)
-			idx.customerRules[custKey][provKey] = RuleResult{Rule: r, RuleLevel: "customer"}
+			idx.flatRules[makeIndexKey(custKey, provKey)] = RuleResult{Rule: r, RuleLevel: "customer"}
 		}
 	}
 
@@ -564,10 +587,9 @@ func BuildRuleIndex(allRules []FreightRule) *RuleIndex {
 			if !isCampaignActive(r) {
 				continue
 			}
-			ensureCustomer(r.CustomerName)
 			custKey := NormalizeCustomerName(r.CustomerName)
 			if r.Province == "" {
-				idx.customerRules[custKey][""] = RuleResult{Rule: r, RuleLevel: "campaign"}
+				idx.flatRules[makeIndexKey(custKey, "")] = RuleResult{Rule: r, RuleLevel: "campaign"}
 			}
 		}
 	}
@@ -577,10 +599,9 @@ func BuildRuleIndex(allRules []FreightRule) *RuleIndex {
 			if !isCampaignActive(r) {
 				continue
 			}
-			ensureCustomer(r.CustomerName)
 			custKey := NormalizeCustomerName(r.CustomerName)
 			provKey := NormalizeProvince(r.Province)
-			idx.customerRules[custKey][provKey] = RuleResult{Rule: r, RuleLevel: "campaign"}
+			idx.flatRules[makeIndexKey(custKey, provKey)] = RuleResult{Rule: r, RuleLevel: "campaign"}
 		}
 	}
 
@@ -606,21 +627,23 @@ func BuildRuleIndex(allRules []FreightRule) *RuleIndex {
 	return idx
 }
 
-// Find 从索引中 O(1) 查找最佳规则
-// 返回值可能为 nil（无匹配规则）
+// Find 从索引中 O(1) 查找最佳规则（使用预计算键版本更快）
+// 如果 RowData 中有预计算的 CustKey/ProvKey，请使用 FindByKeys
 func (idx *RuleIndex) Find(customer, province string) *RuleResult {
 	custKey := NormalizeCustomerName(customer)
 	provKey := NormalizeProvince(province)
-	// 1. 查找客户规则（含 campaign）
-	if cm, ok := idx.customerRules[custKey]; ok {
-		// 精确省份匹配
-		if r, ok := cm[provKey]; ok {
-			return &r
-		}
-		// 通配省份匹配
-		if r, ok := cm[""]; ok {
-			return &r
-		}
+	return idx.FindByKeys(custKey, provKey)
+}
+
+// FindByKeys 使用预计算的归一化键查找（零字符串分配，最高性能）
+func (idx *RuleIndex) FindByKeys(custKey, provKey string) *RuleResult {
+	// 1. 查找客户规则（含 campaign）- 单次 map 查找
+	if r, ok := idx.flatRules[makeIndexKey(custKey, provKey)]; ok {
+		return &r
+	}
+	// 回退到通配省份
+	if r, ok := idx.flatRules[makeIndexKey(custKey, "")]; ok {
+		return &r
 	}
 	// 2. 查找全局规则
 	if r, ok := idx.globalRules[provKey]; ok {

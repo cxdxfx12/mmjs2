@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"yunfei/internal/db"
@@ -177,9 +176,9 @@ type RuleSaveReq struct {
 	FirstWeight   float64             `json:"first_weight"`
 	FirstPrice    float64             `json:"first_price"`
 	ContPrice     float64             `json:"cont_price"`
-	MinFee        float64             `json:"min_fee"`
-	MaxFee        float64             `json:"max_fee"`
-	Surcharge     float64             `json:"surcharge"`
+	MinFee        *float64            `json:"min_fee,omitempty"`
+	MaxFee        *float64            `json:"max_fee,omitempty"`
+	Surcharge     *float64            `json:"surcharge,omitempty"`
 	CampaignName  string              `json:"campaign_name"`
 	CampaignStart string              `json:"campaign_start"`
 	CampaignEnd   string              `json:"campaign_end"`
@@ -191,6 +190,18 @@ type RuleSaveReq struct {
 }
 
 func (a *App) SaveRule(r RuleSaveReq) int64 {
+	// 处理指针字段：nil 表示未设置（使用-1标记），非nil则使用实际值
+	var minFee, maxFee, surcharge float64 = -1, -1, -1
+	if r.MinFee != nil {
+		minFee = *r.MinFee
+	}
+	if r.MaxFee != nil {
+		maxFee = *r.MaxFee
+	}
+	if r.Surcharge != nil {
+		surcharge = *r.Surcharge
+	}
+
 	rule := rules.FreightRule{
 		ID:            r.ID,
 		RuleType:      r.RuleType,
@@ -200,9 +211,9 @@ func (a *App) SaveRule(r RuleSaveReq) int64 {
 		FirstWeight:   r.FirstWeight,
 		FirstPrice:    r.FirstPrice,
 		ContPrice:     r.ContPrice,
-		MinFee:        r.MinFee,
-		MaxFee:        r.MaxFee,
-		Surcharge:     r.Surcharge,
+		MinFee:        minFee,
+		MaxFee:        maxFee,
+		Surcharge:     surcharge,
 		CampaignName:  r.CampaignName,
 		CampaignStart: r.CampaignStart,
 		CampaignEnd:   r.CampaignEnd,
@@ -512,9 +523,14 @@ func (a *App) doCalc(rowData []excel.RowData, progress ProgressFn, inputFile str
 		progress("calculating", 0, total, fmt.Sprintf("启动 %d 核并行计算...", numWorkers))
 	}
 
+	// Worker 结果结构（用于本地累加后合并）
+	type workerResult struct {
+		markupSum float64
+		processed int64
+	}
+
 	var wg sync.WaitGroup
-	var processed atomic.Int64
-	var markupCents atomic.Int64
+	results := make(chan workerResult, numWorkers)
 
 	for w := 0; w < numWorkers; w++ {
 		start := w * chunkSize
@@ -528,26 +544,38 @@ func (a *App) doCalc(rowData []excel.RowData, progress ProgressFn, inputFile str
 		wg.Add(1)
 		go func(start, end int) {
 			defer wg.Done()
+			localMarkup := 0.0
+			localProcessed := int64(0)
 			for i := start; i < end; i++ {
-				fee, _, markup, _, best := freight.CalcSingleWithIndexFast(
-					rowData[i].Weight, rowData[i].Customer, rowData[i].Province, ruleIdx, gr, bracketMap, provSurchargeMap)
+				// 使用预计算键的快速版本（零字符串分配）
+				fee, _, markup, _, best := freight.CalcSingleWithKeys(
+					rowData[i].Weight, rowData[i].CustKey, rowData[i].ProvKey, ruleIdx, gr, bracketMap, provSurchargeMap)
 				rowData[i].Fee = fee
-				markupCents.Add(int64(markup * 100))
+				localMarkup += markup
+				localProcessed++
 				if best != nil {
 					rowData[i].RuleLevel = best.RuleLevel
 					rowData[i].ContMode = best.Rule.ContMode
 					rowData[i].CalcMode = best.Rule.CalcMode
 					rowData[i].ZoneName = best.Rule.ZoneName
 				}
-				cur := processed.Add(1)
-				if progress != nil && cur%2000 == 0 {
-					progress("calculating", int(cur), total,
-						fmt.Sprintf("正在计算... %d/%d (%.0f%%)", cur, total, float64(cur)*100/float64(total)))
+				// 进度回调（减少频率，每 2000 行）
+				if progress != nil && localProcessed%2000 == 0 {
+					progress("calculating", int(localProcessed), total,
+						fmt.Sprintf("正在计算... %d/%d (%.0f%%)", localProcessed, total, float64(localProcessed)*100/float64(total)))
 				}
 			}
+			results <- workerResult{markupSum: localMarkup, processed: localProcessed}
 		}(start, end)
 	}
 	wg.Wait()
+	close(results)
+
+	// 合并 Worker 结果
+	totalMarkup := 0.0
+	for res := range results {
+		totalMarkup += res.markupSum
+	}
 
 	if progress != nil {
 		progress("calculating", total, total, "正在计算拉均重加价...")
@@ -565,7 +593,7 @@ func (a *App) doCalc(rowData []excel.RowData, progress ProgressFn, inputFile str
 
 	duration := math.Round(time.Since(startTime).Seconds()*100) / 100
 	summary := excel.BuildSummary(rowData, duration)
-	tMarkup := float64(markupCents.Load()) / 100.0
+	tMarkup := totalMarkup
 	if tMarkup > 0 {
 		summary.TotalMarkup = math.Round(tMarkup*100) / 100
 	}
