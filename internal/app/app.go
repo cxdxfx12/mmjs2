@@ -482,7 +482,7 @@ func (a *App) doCalc(rowData []excel.RowData, progress ProgressFn, inputFile str
 		allRules = nil
 	}
 	gr := rules.GetGlobalRules()
-	ruleIdx := rules.BuildRuleIndex(allRules, gr)
+	ruleIdx := rules.BuildRuleIndex(allRules)
 
 	// 预加载重量区间数据（批量计算性能优化）
 	bracketMap, _ := rules.LoadRuleBrackets(allRules)
@@ -814,7 +814,7 @@ func (a *App) TestRule(customer, province string, weight float64) map[string]int
 	gr := rules.GetGlobalRules()
 
 	bracketMap, _ := rules.LoadRuleBrackets(allRules)
-	idx := rules.BuildRuleIndex(allRules, gr)
+	idx := rules.BuildRuleIndex(allRules)
 
 	fee, rawFee, markup, baseFee, best := freight.CalcSingleWithIndex(weight, customer, province, idx, gr, bracketMap)
 
@@ -885,7 +885,7 @@ func (a *App) TestRuleBatch(customer string, province string, weights []float64)
 	gr := rules.GetGlobalRules()
 
 	bracketMap, _ := rules.LoadRuleBrackets(allRules)
-	idx := rules.BuildRuleIndex(allRules, gr)
+	idx := rules.BuildRuleIndex(allRules)
 
 	results := make([]map[string]interface{}, 0)
 

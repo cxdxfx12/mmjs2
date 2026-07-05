@@ -42,14 +42,14 @@ var (
 
 // ========== 进度追踪 ==========
 type TaskProgress struct {
-	TaskID    string  `json:"task_id"`
-	Phase     string  `json:"phase"` // reading / calculating / done / error
-	Current   int     `json:"current"`
-	Total     int     `json:"total"`
-	Pct       int     `json:"pct"`
-	Message   string  `json:"message"`
-	Error     string  `json:"error,omitempty"`
-	UpdatedAt int64   `json:"updated_at"`
+	TaskID    string `json:"task_id"`
+	Phase     string `json:"phase"` // reading / calculating / done / error
+	Current   int    `json:"current"`
+	Total     int    `json:"total"`
+	Pct       int    `json:"pct"`
+	Message   string `json:"message"`
+	Error     string `json:"error,omitempty"`
+	UpdatedAt int64  `json:"updated_at"`
 }
 
 // BatchTaskInfo 批量任务中单个文件的信息
@@ -135,8 +135,12 @@ func main() {
 		if data, err := os.ReadFile(settingsFile); err == nil {
 			var s map[string]interface{}
 			if json.Unmarshal(data, &s) == nil {
-				if u, ok := s["admin_user"].(string); ok && u != "" { adminUser = u }
-				if p, ok := s["admin_pass"].(string); ok && p != "" { adminPass = p }
+				if u, ok := s["admin_user"].(string); ok && u != "" {
+					adminUser = u
+				}
+				if p, ok := s["admin_pass"].(string); ok && p != "" {
+					adminPass = p
+				}
 			}
 		}
 
@@ -194,7 +198,9 @@ func main() {
 			writeJSON(w, map[string]string{"ok": "false", "msg": "method not allowed"})
 			return
 		}
-		var req struct{ LicenseKey string `json:"license_key"` }
+		var req struct {
+			LicenseKey string `json:"license_key"`
+		}
 		json.NewDecoder(r.Body).Decode(&req)
 		writeJSON(w, a.ActivateOnline(req.LicenseKey))
 	})
@@ -204,7 +210,9 @@ func main() {
 			writeJSON(w, map[string]string{"ok": "false", "msg": "method not allowed"})
 			return
 		}
-		var req struct{ LicenseData string `json:"license_data"` }
+		var req struct {
+			LicenseData string `json:"license_data"`
+		}
 		json.NewDecoder(r.Body).Decode(&req)
 		writeJSON(w, a.ActivateWithLicenseData(req.LicenseData))
 	})
@@ -217,7 +225,9 @@ func main() {
 			writeJSON(w, map[string]string{"ok": "false"})
 			return
 		}
-		var req struct{ URL string `json:"url"` }
+		var req struct {
+			URL string `json:"url"`
+		}
 		json.NewDecoder(r.Body).Decode(&req)
 		a.SetServerURL(req.URL)
 		writeJSON(w, map[string]bool{"ok": true})
@@ -238,7 +248,9 @@ func main() {
 			return
 		}
 		if r.Method == "POST" {
-			var req struct{ Secret string `json:"api_secret"` }
+			var req struct {
+				Secret string `json:"api_secret"`
+			}
 			json.NewDecoder(r.Body).Decode(&req)
 			if req.Secret != "" {
 				a.SetApiSecret(req.Secret)
@@ -252,7 +264,9 @@ func main() {
 			writeJSON(w, map[string]string{"ok": "false"})
 			return
 		}
-		var req struct{ URL string `json:"url"` }
+		var req struct {
+			URL string `json:"url"`
+		}
 		json.NewDecoder(r.Body).Decode(&req)
 		a.SetBackupServerURL(req.URL)
 		writeJSON(w, map[string]bool{"ok": true})
@@ -302,14 +316,20 @@ func main() {
 			writeJSON(w, a.GetZones())
 		} else if r.Method == "POST" {
 			var z rules.Zone
-			json.NewDecoder(r.Body).Decode(&z)
+			if err := decodeJSONBody(r, &z); err != nil {
+				writeJSON(w, map[string]interface{}{"ok": false, "error": "invalid request body: " + err.Error()})
+				return
+			}
 			id := a.SaveZone(z)
 			writeJSON(w, map[string]int64{"id": id})
 		}
 	})
 	mux.HandleFunc("/api/zones/delete", func(w http.ResponseWriter, r *http.Request) {
 		var req struct{ ID int64 }
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := decodeJSONBody(r, &req); err != nil {
+			writeJSON(w, map[string]interface{}{"ok": false, "error": "invalid request body: " + err.Error()})
+			return
+		}
 		writeJSON(w, map[string]bool{"ok": a.DeleteZone(req.ID)})
 	})
 	mux.HandleFunc("/api/zones/templates", func(w http.ResponseWriter, r *http.Request) {
@@ -322,14 +342,20 @@ func main() {
 			writeJSON(w, a.GetAvgWeightRules())
 		} else if r.Method == "POST" {
 			var rl rules.AvgWeightRule
-			json.NewDecoder(r.Body).Decode(&rl)
+			if err := decodeJSONBody(r, &rl); err != nil {
+				writeJSON(w, map[string]interface{}{"ok": false, "error": "invalid request body: " + err.Error()})
+				return
+			}
 			id := a.SaveAvgWeightRule(rl)
 			writeJSON(w, map[string]int64{"id": id})
 		}
 	})
 	mux.HandleFunc("/api/avg-weight-rules/delete", func(w http.ResponseWriter, r *http.Request) {
 		var req struct{ ID int64 }
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := decodeJSONBody(r, &req); err != nil {
+			writeJSON(w, map[string]interface{}{"ok": false, "error": "invalid request body: " + err.Error()})
+			return
+		}
 		writeJSON(w, map[string]bool{"ok": a.DeleteAvgWeightRule(req.ID)})
 	})
 	mux.HandleFunc("/api/avg-weight", func(w http.ResponseWriter, r *http.Request) {
@@ -348,7 +374,10 @@ func main() {
 			ID        int64 `json:"id"`
 			IsEnabled int   `json:"is_enabled"`
 		}
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := decodeJSONBody(r, &req); err != nil {
+			writeJSON(w, map[string]interface{}{"ok": false, "error": "invalid request body: " + err.Error()})
+			return
+		}
 		if req.ID > 0 {
 			rules.ToggleAvgWeight(req.ID, req.IsEnabled)
 		}
@@ -364,10 +393,13 @@ func main() {
 			writeJSON(w, a.GetRuleBrackets(ruleID))
 		} else if r.Method == "POST" {
 			var req struct {
-				RuleID   int64                `json:"rule_id"`
+				RuleID   int64                 `json:"rule_id"`
 				Brackets []rules.WeightBracket `json:"brackets"`
 			}
-			json.NewDecoder(r.Body).Decode(&req)
+			if err := decodeJSONBody(r, &req); err != nil {
+				writeJSON(w, map[string]interface{}{"ok": false, "error": "invalid request body: " + err.Error()})
+				return
+			}
 			writeJSON(w, map[string]bool{"ok": a.SaveRuleBrackets(req.RuleID, req.Brackets)})
 		}
 	})
@@ -375,12 +407,15 @@ func main() {
 	// ========== 区域规则模板生成 ==========
 	mux.HandleFunc("/api/zones/generate-rules", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			CustomerName string                          `json:"customer_name"`
-			ContMode     string                          `json:"cont_mode"`
-			CalcMode     string                          `json:"calc_mode"`
+			CustomerName string                           `json:"customer_name"`
+			ContMode     string                           `json:"cont_mode"`
+			CalcMode     string                           `json:"calc_mode"`
 			PriceTable   map[string]rules.ZonePriceScheme `json:"price_table"`
 		}
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := decodeJSONBody(r, &req); err != nil {
+			writeJSON(w, map[string]interface{}{"ok": false, "error": "invalid request body: " + err.Error()})
+			return
+		}
 		result := a.GenerateZoneRulesByTemplate(req.CustomerName, req.ContMode, req.CalcMode, req.PriceTable)
 		writeJSON(w, result)
 	})
@@ -482,11 +517,11 @@ func main() {
 			return
 		}
 		var req struct {
-			Customer string   `json:"customer"`
-			Province string   `json:"province"`
-			Weight   float64  `json:"weight"`
+			Customer string    `json:"customer"`
+			Province string    `json:"province"`
+			Weight   float64   `json:"weight"`
 			Weights  []float64 `json:"weights"`
-			Batch    bool     `json:"batch"`
+			Batch    bool      `json:"batch"`
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 		if req.Batch {
@@ -636,7 +671,9 @@ func main() {
 		os.MkdirAll(tmpDir, 0755)
 		for _, fh := range files {
 			src, err := fh.Open()
-			if err != nil { continue }
+			if err != nil {
+				continue
+			}
 			savePath := filepath.Join(tmpDir, fh.Filename)
 			dst, _ := os.Create(savePath)
 			io.Copy(dst, src)
@@ -660,17 +697,22 @@ func main() {
 	})
 	// 多文件预览
 	mux.HandleFunc("/api/excel/preview-multi", func(w http.ResponseWriter, r *http.Request) {
-		var req struct{ Files []struct{ Path string; Name string } }
+		var req struct {
+			Files []struct {
+				Path string
+				Name string
+			}
+		}
 		json.NewDecoder(r.Body).Decode(&req)
 		type previewItem struct {
-			Name     string  `json:"name"`
-			Path     string  `json:"path"`
-			TotalRows int    `json:"total_rows"`
-			Customers []string `json:"customers"`
-			Provinces []string `json:"provinces"`
-			Columns  []string `json:"columns"`
-			Samples  [][]string `json:"samples"`
-			Error    string  `json:"error,omitempty"`
+			Name      string     `json:"name"`
+			Path      string     `json:"path"`
+			TotalRows int        `json:"total_rows"`
+			Customers []string   `json:"customers"`
+			Provinces []string   `json:"provinces"`
+			Columns   []string   `json:"columns"`
+			Samples   [][]string `json:"samples"`
+			Error     string     `json:"error,omitempty"`
 		}
 		var results []previewItem
 		for _, f := range req.Files {
@@ -715,7 +757,7 @@ func main() {
 		// 并行启动计算
 		allRules, _ := rules.GetAll()
 		gr := rules.GetGlobalRules()
-		ruleIdx := rules.BuildRuleIndex(allRules, gr)
+		ruleIdx := rules.BuildRuleIndex(allRules)
 		// 预加载重量区间数据
 		bracketMap, _ := rules.LoadRuleBrackets(allRules)
 		// 预加载省份加价数据（避免每行查数据库，大幅提升性能）
@@ -739,7 +781,9 @@ func main() {
 					prog.UpdatedAt = time.Now().UnixMilli()
 				})
 				if err != nil {
-					prog.Phase = "error"; prog.Error = err.Error(); prog.Message = "读取失败"
+					prog.Phase = "error"
+					prog.Error = err.Error()
+					prog.Message = "读取失败"
 					prog.UpdatedAt = time.Now().UnixMilli()
 					return
 				}
@@ -752,23 +796,35 @@ func main() {
 
 				// 多核并行计算
 				numWorkers := runtime.NumCPU()
-				if numWorkers < 1 { numWorkers = 1 }
-				if numWorkers > 16 { numWorkers = 16 }
+				if numWorkers < 1 {
+					numWorkers = 1
+				}
+				if numWorkers > 16 {
+					numWorkers = 16
+				}
 				chunkSize := (total + numWorkers - 1) / numWorkers
 
 				var wg sync.WaitGroup
 				var processed atomic.Int64
 				var markupCents atomic.Int64
 				reportEvery := total / 200
-				if reportEvery < 100 { reportEvery = 100 }
-				if reportEvery > 5000 { reportEvery = 5000 }
+				if reportEvery < 100 {
+					reportEvery = 100
+				}
+				if reportEvery > 5000 {
+					reportEvery = 5000
+				}
 
 				startT := time.Now()
 				for w := 0; w < numWorkers; w++ {
 					start := w * chunkSize
 					end := start + chunkSize
-					if end > total { end = total }
-					if start >= end { continue }
+					if end > total {
+						end = total
+					}
+					if start >= end {
+						continue
+					}
 					wg.Add(1)
 					go func(start, end int) {
 						defer wg.Done()
@@ -826,7 +882,10 @@ func main() {
 					}
 					summary.AvgWeightResults = avgInterfaces
 				}
-				prog.Phase = "done"; prog.Pct = 100; prog.Current = total; prog.Total = total
+				prog.Phase = "done"
+				prog.Pct = 100
+				prog.Current = total
+				prog.Total = total
 				prog.Message = "完成"
 				prog.UpdatedAt = time.Now().UnixMilli()
 				taskResults.Store(taskID, &app.CalcResult{Data: rowData, Summary: summary, FileName: t.FileName})
@@ -857,7 +916,9 @@ func main() {
 				pct := 0
 				if total > 0 {
 					pct = current * 100 / total
-					if pct > 100 { pct = 100 }
+					if pct > 100 {
+						pct = 100
+					}
 				}
 				prog.Phase = phase
 				prog.Current = current
@@ -911,12 +972,18 @@ func main() {
 			tp := taskProgResp{TaskID: t.TaskID, FileName: t.FileName}
 			if v, ok := progressStore.Load(t.TaskID); ok {
 				p := v.(*TaskProgress)
-				tp.Phase = p.Phase; tp.Pct = p.Pct; tp.Current = p.Current; tp.Total = p.Total; tp.Message = p.Message; tp.Error = p.Error
+				tp.Phase = p.Phase
+				tp.Pct = p.Pct
+				tp.Current = p.Current
+				tp.Total = p.Total
+				tp.Message = p.Message
+				tp.Error = p.Error
 				if p.Phase != "done" && p.Phase != "error" {
 					allDone = false
 				}
 			} else {
-				tp.Phase = "waiting"; tp.Message = "等待中"
+				tp.Phase = "waiting"
+				tp.Message = "等待中"
 				allDone = false
 			}
 			tasks = append(tasks, tp)
@@ -1193,6 +1260,13 @@ func openBrowser(url string) {
 func writeJSON(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(data)
+}
+
+func decodeJSONBody(r *http.Request, v interface{}) error {
+	if r.Body == nil {
+		return fmt.Errorf("empty request body")
+	}
+	return json.NewDecoder(r.Body).Decode(v)
 }
 
 func getFileSize(path string) int64 {

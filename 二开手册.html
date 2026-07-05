@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>喵喵结算二开手册</title>
+  <style>
+    :root {
+      --bg: #07111f;
+      --panel: #0f172a;
+      --panel-2: #111c31;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-2: #34d399;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --border: rgba(148, 163, 184, 0.2);
+      --shadow: 0 20px 45px rgba(0,0,0,.25);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      background: linear-gradient(135deg, #07111f 0%, #0f172a 100%);
+      color: var(--text);
+      line-height: 1.7;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 300px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 24px 16px;
+      background: rgba(8, 15, 28, 0.92);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      backdrop-filter: blur(8px);
+    }
+    .brand {
+      padding: 18px 12px 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .brand h1 { margin: 0 0 6px; font-size: 1.1rem; }
+    .brand p { margin: 0; color: var(--muted); font-size: .95rem; }
+    .nav a {
+      display: block;
+      padding: 10px 12px;
+      margin: 6px 0;
+      border-radius: 10px;
+      color: var(--text);
+      transition: .2s ease;
+      border: 1px solid transparent;
+    }
+    .nav a:hover, .nav a.active {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: rgba(56, 189, 248, 0.32);
+      text-decoration: none;
+    }
+    .content {
+      flex: 1;
+      padding: 32px 36px 60px;
+      max-width: 1200px;
+    }
+    .hero {
+      background: linear-gradient(120deg, rgba(56,189,248,.18), rgba(52,211,153,.1));
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 26px 28px;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+    .hero h2 { margin: 0 0 8px; font-size: 1.7rem; }
+    .hero p { margin: 0; color: var(--muted); }
+    section { margin-bottom: 28px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px 22px;
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+    }
+    .card h3, .card h4 { margin-top: 0; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: .85rem;
+      background: rgba(56,189,248,.15);
+      color: #bae6fd;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+    code, pre {
+      font-family: Consolas, "Courier New", monospace;
+    }
+    pre {
+      background: #020617;
+      color: #e2e8f0;
+      border: 1px solid var(--border);
+      padding: 14px 16px;
+      border-radius: 12px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      overflow: hidden;
+      border-radius: 12px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: rgba(56,189,248,.10); color: #bae6fd; }
+    .warn { color: var(--warn); }
+    .danger { color: var(--danger); }
+    .good { color: var(--accent-2); }
+    ul { padding-left: 20px; }
+    .step { display: flex; gap: 12px; align-items: flex-start; margin: 10px 0; }
+    .step .num {
+      flex: 0 0 32px;
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #2563eb);
+      display: grid; place-items: center; font-weight: 700;
+    }
+    .toc { display: grid; gap: 8px; }
+    .toc a { display: inline-block; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,.04); }
+    footer { color: var(--muted); font-size: .95rem; margin-top: 28px; }
+    @media (max-width: 960px) {
+      .wrap { flex-direction: column; }
+      .sidebar { width: 100%; height: auto; position: relative; }
+      .content { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>喵喵结算二开手册</h1>
+        <p>Go + Vue 3 + SQLite 桌面结算系统</p>
+      </div>
+      <div class="nav">
+        <a href="#quickstart" class="active">快速上手</a>
+        <a href="#architecture">项目架构</a>
+        <a href="#backend">后端开发</a>
+        <a href="#frontend">前端开发</a>
+        <a href="#rules">规则与计费</a>
+        <a href="#database">数据库</a>
+        <a href="#api">接口说明</a>
+        <a href="#develop">如何继续开发</a>
+        <a href="#build">构建与打包</a>
+        <a href="#faq">常见问题</a>
+      </div>
+    </aside>
+    <main class="content">
+      <div class="hero">
+        <h2>给二次开发程序员的完整交接说明</h2>
+        <p>这份手册面向接手本项目的开发者，目标是让你一眼知道项目是做什么、代码怎么组织、哪些文件该改、如何调试、如何打包。</p>
+      </div>
+
+      <section id="quickstart">
+        <div class="card">
+          <h3>1. 快速上手</h3>
+          <div class="pill">Windows</div><div class="pill">Go 1.22+</div><div class="pill">Node 20+</div><div class="pill">npm</div>
+          <h4>1.1 环境要求</h4>
+          <ul>
+            <li>Go 1.22 或更高</li>
+            <li>Node.js 20+，npm 10+</li>
+            <li>Git</li>
+            <li>Windows 下建议使用 PowerShell</li>
+          </ul>
+
+          <h4>1.2 初始化依赖</h4>
+          <pre>cd c:\Users\ccc\Desktop\yunfei\mmjs2-main
+go mod tidy
+cd frontend
+npm install</pre>
+
+          <h4>1.3 本地运行</h4>
+          <pre># 终端 1：启动后端
+cd c:\Users\ccc\Desktop\yunfei\mmjs2-main
+go run .
+
+# 终端 2：启动前端开发服务器
+cd c:\Users\ccc\Desktop\yunfei\mmjs2-main\frontend
+npm run dev</pre>
+          <p>前端开发时，Vite 会把 <code>/api</code> 代理到本地后端 <code>http://localhost:58080</code>，所以前端调试非常方便。</p>
+
+          <h4>1.4 先做一次验证</h4>
+          <pre>go test ./...
+cd frontend && npm run build</pre>
+          <p class="good">如果上述命令都通过，说明当前环境基本可用。</p>
+        </div>
+      </section>
+
+      <section id="architecture">
+        <div class="card">
+          <h3>2. 项目定位与架构</h3>
+          <p>这是一个“本地桌面软件 + 浏览器界面 + SQLite 本地数据库”的快递运费结算系统。核心目标是：批量导入 Excel、按规则计算运费、输出结果并保存历史。</p>
+          <h4>2.1 技术栈</h4>
+          <table>
+            <thead>
+              <tr><th>层</th><th>技术</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>前端</td><td>Vue 3 + TypeScript + Vite + Pinia + Element Plus</td><td>负责界面、路由、状态管理</td></tr>
+              <tr><td>后端</td><td>Go</td><td>提供 HTTP API、业务逻辑、数据库访问</td></tr>
+              <tr><td>数据层</td><td>SQLite</td><td>本地存储规则、历史、授权信息</td></tr>
+              <tr><td>Excel</td><td>excelize/v2</td><td>读取/导出 Excel</td></tr>
+              <tr><td>打包</td><td>Go + PowerShell / Batch</td><td>生成 Windows 可执行文件</td></tr>
+            </tbody>
+          </table>
+
+          <h4>2.2 核心目录</h4>
+          <pre>main.go                      # 程序入口、HTTP 路由、前端服务
+internal/app/app.go         # 应用门面层，统一业务调用
+internal/db/sqlite.go       # 数据库初始化与迁移
+internal/freight/           # 运费计算引擎
+internal/rules/             # 规则模型、仓储、匹配逻辑
+internal/license/           # 授权系统
+frontend/src/               # Vue 前端页面与状态管理
+server_php/                 # PHP 授权服务端（可选）</pre>
+        </div>
+      </section>
+
+      <section id="backend">
+        <div class="card">
+          <h3>3. 后端开发指南</h3>
+          <h4>3.1 入口文件</h4>
+          <p>主程序入口在 <code>main.go</code>，职责包括：</p>
+          <ul>
+            <li>启动 HTTP 服务</li>
+            <li>注册所有 API 路由</li>
+            <li>嵌入前端静态资源</li>
+            <li>处理授权与登录</li>
+            <li>处理 Excel 上传/预览/计算/导出</li>
+          </ul>
+
+          <h4>3.2 常用模块职责</h4>
+          <table>
+            <thead>
+              <tr><th>文件</th><th>职责</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>internal/app/app.go</td><td>统一暴露业务能力，适合作为调用总入口</td></tr>
+              <tr><td>internal/db/sqlite.go</td><td>数据库连接、schema 初始化、写锁控制</td></tr>
+              <tr><td>internal/freight/engine.go</td><td>基础运费、附加费用、全局加价计算</td></tr>
+              <tr><td>internal/freight/avgweight.go</td><td>拉均重 / 偏差加价</td></tr>
+              <tr><td>internal/rules/repository.go</td><td>规则查找、规则索引、活动时间判定</td></tr>
+              <tr><td>internal/rules/models.go</td><td>数据结构定义</td></tr>
+              <tr><td>internal/rules/brackets.go</td><td>区间计费逻辑</td></tr>
+              <tr><td>internal/license/</td><td>授权与机器码相关逻辑</td></tr>
+            </tbody>
+          </table>
+
+          <h4>3.3 后端开发规范</h4>
+          <ul>
+            <li>数据库写入优先使用 <code>db.WriteExec()</code></li>
+            <li>避免直接裸写 SQLite，防止锁竞争</li>
+            <li>新增接口时，优先复用现有 <code>decodeJSONBody</code> 之类的解析方式</li>
+            <li>大批量计算要尽量走规则索引和预加载逻辑</li>
+            <li>改动计费逻辑时，一定要补测试</li>
+          </ul>
+
+          <h4>3.4 常见后端新增功能流程</h4>
+          <div class="step"><div class="num">1</div><div>在 <code>internal/</code> 下新增对应模块或复用现有模块</div></div>
+          <div class="step"><div class="num">2</div><div>在 <code>main.go</code> 中注册新的 HTTP 路由</div></div>
+          <div class="step"><div class="num">3</div><div>在前端 <code>frontend/src/api/index.ts</code> 中补接口封装</div></div>
+          <div class="step"><div class="num">4</div><div>在前端页面中接入调用，更新路由或状态管理</div></div>
+          <div class="step"><div class="num">5</div><div>执行 <code>go test ./...</code> 与前端构建验证</div></div>
+        </div>
+      </section>
+
+      <section id="frontend">
+        <div class="card">
+          <h3>4. 前端开发指南</h3>
+          <h4>4.1 页面结构</h4>
+          <pre>frontend/src/views/
+  Layout.vue      # 布局，左侧导航
+  Home.vue        # 首页
+  Calc.vue        # 计算页面
+  Rules.vue       # 规则管理
+  History.vue     # 计算历史
+  Settings.vue    # 设置
+  License.vue     # 授权
+  Login.vue       # 登录
+  TestRule.vue    # 规则测试</pre>
+
+          <h4>4.2 状态管理</h4>
+          <p>当前使用 Pinia，状态入口在 <code>frontend/src/stores/app.ts</code>。</p>
+          <ul>
+            <li>页面间共享的数据建议放到 Pinia</li>
+            <li>组件内部只保留局部状态</li>
+            <li>接口调用尽量封装到 <code>frontend/src/api/index.ts</code></li>
+          </ul>
+
+          <h4>4.3 路由与新增页面</h4>
+          <pre>在 frontend/src/router/index.ts 中注册新页面。</pre>
+          <p>新增页面一般要做三件事：</p>
+          <ol>
+            <li>在 <code>src/views/</code> 下新增 Vue 文件</li>
+            <li>在 <code>src/router/index.ts</code> 注册路径</li>
+            <li>在 <code>src/views/Layout.vue</code> 的导航菜单里补入口</li>
+          </ol>
+
+          <h4>4.4 前端开发约定</h4>
+          <ul>
+            <li>优先使用 Composition API</li>
+            <li>所有接口请求尽量统一封装，不要散落在组件中</li>
+            <li>页面交互复杂时，先抽象成 composable 或 store</li>
+            <li>打包前确保 <code>npm run build</code> 无错误</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="rules">
+        <div class="card">
+          <h3>5. 规则与计费体系</h3>
+          <h4>5.1 规则类型</h4>
+          <table>
+            <thead>
+              <tr><th>类型</th><th>用途</th><th>优先级</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>campaign</td><td>活动规则，带时间范围</td><td>最高</td></tr>
+              <tr><td>customer</td><td>客户规则</td><td>较高</td></tr>
+              <tr><td>global</td><td>全局规则</td><td>中等</td></tr>
+              <tr><td>default</td><td>默认规则</td><td>最低</td></tr>
+            </tbody>
+          </table>
+
+          <h4>5.2 匹配顺序</h4>
+          <pre>campaign → customer → global → default</pre>
+          <p>同级别里，精确省份优先于全国通配（空省份）。</p>
+
+          <h4>5.3 计费模式</h4>
+          <ul>
+            <li><strong>simple</strong>：首重续重</li>
+            <li><strong>bracket</strong>：区间计费，支持一口价和首续重混合</li>
+          </ul>
+
+          <h4>5.4 续重单位</h4>
+          <ul>
+            <li><code>full_kg</code>：按整公斤向上取整</li>
+            <li><code>hundred_gram</code>：按 100g 为单位</li>
+            <li><code>actual_weight</code>：按实际重量</li>
+          </ul>
+
+          <h4>5.5 额外费用叠加顺序</h4>
+          <pre>基础运费
++ surcharge
++ 省份附加费
++ 最低/最高价限制
++ 全局加价
+= 最终运费</pre>
+
+          <h4>5.6 拉均重规则</h4>
+          <p>拉均重规则主要在 <code>internal/freight/avgweight.go</code> 中实现，流程是：</p>
+          <pre>按客户分组统计重量
+→ 过滤超上限包裹
+→ 计算平均重量
+→ 与基准重量比较
+→ 按 step_weight / step_price 计算加价
+→ 分摊到每件订单</pre>
+        </div>
+      </section>
+
+      <section id="database">
+        <div class="card">
+          <h3>6. 数据库说明</h3>
+          <p>项目用 SQLite，本地文件存储，数据文件通常位于用户目录下，Windows 下多半是 <code>%APPDATA%/yunfei/yunfei.db</code>。</p>
+          <h4>6.1 重要表</h4>
+          <table>
+            <thead>
+              <tr><th>表名</th><th>作用</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>freight_rules</td><td>运费规则</td></tr>
+              <tr><td>freight_weight_brackets</td><td>区间计费规则数据</td></tr>
+              <tr><td>global_rules</td><td>全局保底与加价配置</td></tr>
+              <tr><td>global_province_surcharges</td><td>省份附加费</td></tr>
+              <tr><td>calc_history</td><td>历史计算记录</td></tr>
+              <tr><td>license_info</td><td>授权信息</td></tr>
+            </tbody>
+          </table>
+
+          <h4>6.2 开发注意事项</h4>
+          <ul>
+            <li>数据库修改优先通过现有仓储函数</li>
+            <li>写入请走 <code>db.WriteExec</code></li>
+            <li>避免长时间占用数据库连接</li>
+            <li>如果你改了表结构，要同时更新初始化逻辑和迁移逻辑</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="api">
+        <div class="card">
+          <h3>7. 主要 API 与调用方式</h3>
+          <p>后端是典型的 HTTP API 层，前端通过 <code>frontend/src/api/index.ts</code> 调用。</p>
+          <table>
+            <thead>
+              <tr><th>接口</th><th>用途</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>/api/rules</td><td>获取规则列表</td></tr>
+              <tr><td>/api/rules/save</td><td>保存规则</td></tr>
+              <tr><td>/api/rules/test</td><td>测试规则命中结果</td></tr>
+              <tr><td>/api/global-rules</td><td>获取/设置全局规则</td></tr>
+              <tr><td>/api/province-surcharges</td><td>省份附加费管理</td></tr>
+              <tr><td>/api/avg-weight-rules</td><td>拉均重规则管理</td></tr>
+              <tr><td>/api/calculate</td><td>单次计算</td></tr>
+              <tr><td>/api/calculate/batch</td><td>批量计算</td></tr>
+              <tr><td>/api/excel/upload</td><td>上传 Excel</td></tr>
+              <tr><td>/api/excel/preview</td><td>Excel 预览</td></tr>
+              <tr><td>/api/history</td><td>历史记录</td></tr>
+            </tbody>
+          </table>
+          <p>新增 API 时，建议遵循这种模式：</p>
+          <pre>在 main.go 中注册路由
+→ 在 internal/app/app.go 中封装业务方法
+→ 在 frontend/src/api/index.ts 中暴露前端调用</pre>
+        </div>
+      </section>
+
+      <section id="develop">
+        <div class="card">
+          <h3>8. 如何继续开发</h3>
+          <h4>8.1 如果你要新增一个“规则类型”</h4>
+          <ol>
+            <li>先在 <code>internal/rules/models.go</code> 扩展结构体</li>
+            <li>在 <code>internal/rules/repository.go</code> 中完善保存/读取逻辑</li>
+            <li>在 <code>internal/freight/engine.go</code> 中让计费逻辑识别新类型</li>
+            <li>在前端规则管理页面补字段</li>
+            <li>补测试并验证</li>
+          </ol>
+
+          <h4>8.2 如果你要新增一个页面</h4>
+          <ol>
+            <li>在 <code>frontend/src/views/</code> 新建 Vue 文件</li>
+            <li>在 <code>frontend/src/router/index.ts</code> 注册路由</li>
+            <li>在 <code>frontend/src/views/Layout.vue</code> 增加菜单入口</li>
+            <li>如果需要数据，则在 <code>frontend/src/api/index.ts</code> 和后端接口中加</li>
+          </ol>
+
+          <h4>8.3 如果你要新增一个后端接口</h4>
+          <pre>1. 在 main.go 中注册路由
+2. 在 internal/app/app.go 中写业务方法
+3. 由前端通过 api/index.ts 调用
+4. 记得做参数校验与错误处理</pre>
+
+          <h4>8.4 如果你要修复一个 BUG</h4>
+          <ul>
+            <li>先复现问题，再定位根因</li>
+            <li>尽量只改一个点，避免一锅端</li>
+            <li>如果是计费逻辑，优先写回归测试</li>
+            <li>修完后运行 <code>go test ./...</code> 和前端构建</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="build">
+        <div class="card">
+          <h3>9. 构建与打包</h3>
+          <h4>9.1 前端构建</h4>
+          <pre>cd frontend
+npm run build</pre>
+
+          <h4>9.2 Go 构建</h4>
+          <pre>go build -ldflags="-s -w -H windowsgui" -o 喵喵结算.exe .</pre>
+
+          <h4>9.3 一键打包</h4>
+          <p>当前项目提供了构建脚本：</p>
+          <ul>
+            <li><code>build.bat</code></li>
+            <li><code>build.ps1</code></li>
+          </ul>
+          <pre>powershell -ExecutionPolicy Bypass -File .\build.ps1</pre>
+          <p class="warn">若打包遇到编码或文件名问题，优先检查脚本里的输出名和 PowerShell 的字符编码。</p>
+        </div>
+      </section>
+
+      <section id="faq">
+        <div class="card">
+          <h3>10. 常见问题</h3>
+          <table>
+            <thead>
+              <tr><th>现象</th><th>可能原因</th><th>处理方式</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>前端无法访问后端接口</td><td>后端未启动或端口不对</td><td>确认 <code>go run .</code> 已启动，且 Vite 代理指向 58080</td></tr>
+              <tr><td>数据库被锁</td><td>写入并发过多</td><td>使用 <code>db.WriteExec</code>，避免直接并发写</td></tr>
+              <tr><td>规则没生效</td><td>规则未启用、日期不在范围、客户名/省份不匹配</td><td>检查规则状态、时间字段、Normalize 逻辑</td></tr>
+              <tr><td>打包后的 exe 名称异常</td><td>PowerShell 字符编码或脚本输出名问题</td><td>检查构建脚本中输出文件名，重新生成</td></tr>
+            </tbody>
+          </table>
+
+          <h4>10.1 推荐开发顺序</h4>
+          <ol>
+            <li>先跑通前后端</li>
+            <li>定位你要改的模块</li>
+            <li>先看现有相似功能怎么做</li>
+            <li>小步修改、频繁验证</li>
+            <li>最后做打包确认</li>
+          </ol>
+        </div>
+      </section>
+
+      <footer>
+        <p>本手册内容基于当前仓库结构整理，后续如有新模块、新接口、新规则类型，建议同步更新这里的说明。</p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

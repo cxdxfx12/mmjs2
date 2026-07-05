@@ -2,6 +2,9 @@ package rules
 
 import (
 	"database/sql"
+	"fmt"
+	"time"
+
 	"yunfei/internal/db"
 )
 
@@ -102,15 +105,53 @@ func GetByID(id int64) (*FreightRule, error) {
 func Save(r *FreightRule) (int64, error) {
 	r.Province = NormalizeProvince(r.Province)
 	r.CustomerName = NormalizeCustomerName(r.CustomerName)
+	// 活动规则校验：活动名称与日期必须存在，且结束日期不早于开始日期
+	if r.RuleType == "campaign" {
+		if r.CampaignName == "" {
+			return 0, fmt.Errorf("campaign_name required for campaign rules")
+		}
+		if r.CampaignStart == "" || r.CampaignEnd == "" {
+			return 0, fmt.Errorf("campaign_start and campaign_end are required for campaign rules")
+		}
+		// 尝试解析多种可能的日期格式，最终比较日期部分
+		parseDate := func(s string) (time.Time, error) {
+			if t, err := time.Parse("2006-01-02", s); err == nil {
+				return t, nil
+			}
+			if t, err := time.Parse(time.RFC3339, s); err == nil {
+				return t, nil
+			}
+			if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
+				return t, nil
+			}
+			return time.Time{}, fmt.Errorf("invalid date format: %s", s)
+		}
+		sd, err1 := parseDate(r.CampaignStart)
+		ed, err2 := parseDate(r.CampaignEnd)
+		if err1 != nil || err2 != nil {
+			return 0, fmt.Errorf("invalid campaign date: %v %v", err1, err2)
+		}
+		// 只比较日期部分
+		y1, m1, d1 := sd.Date()
+		y2, m2, d2 := ed.Date()
+		ds := time.Date(y1, m1, d1, 0, 0, 0, 0, time.Local)
+		de := time.Date(y2, m2, d2, 0, 0, 0, 0, time.Local)
+		if de.Before(ds) {
+			return 0, fmt.Errorf("campaign_end before campaign_start")
+		}
+		// 规范化为 YYYY-MM-DD 存储
+		r.CampaignStart = ds.Format("2006-01-02")
+		r.CampaignEnd = de.Format("2006-01-02")
+	}
 	if r.ID > 0 {
 		var existing FreightRule
 		db.DB.QueryRow(`SELECT rule_type, customer_name, province, cont_mode, first_weight, first_price,
 		cont_price, min_fee, max_fee, surcharge, campaign_name, campaign_start, campaign_end,
 		is_enabled, remark, calc_mode, zone_id FROM freight_rules WHERE id=?`, r.ID).Scan(
-		&existing.RuleType, &existing.CustomerName, &existing.Province, &existing.ContMode,
-		&existing.FirstWeight, &existing.FirstPrice, &existing.ContPrice, &existing.MinFee,
-		&existing.MaxFee, &existing.Surcharge, &existing.CampaignName, &existing.CampaignStart,
-		&existing.CampaignEnd, &existing.IsEnabled, &existing.Remark, &existing.CalcMode, &existing.ZoneID)
+			&existing.RuleType, &existing.CustomerName, &existing.Province, &existing.ContMode,
+			&existing.FirstWeight, &existing.FirstPrice, &existing.ContPrice, &existing.MinFee,
+			&existing.MaxFee, &existing.Surcharge, &existing.CampaignName, &existing.CampaignStart,
+			&existing.CampaignEnd, &existing.IsEnabled, &existing.Remark, &existing.CalcMode, &existing.ZoneID)
 
 		if r.ContMode == "" {
 			r.ContMode = existing.ContMode
@@ -365,6 +406,9 @@ func FindBestRule(customer, province string, allRules []FreightRule) *RuleResult
 				if ruleType != "global" && NormalizeCustomerName(r.CustomerName) != custKey {
 					continue
 				}
+				if ruleType == "campaign" && !isCampaignActive(r) {
+					continue
+				}
 				if r.Province == "" {
 					return &RuleResult{Rule: r, RuleLevel: ruleType}
 				}
@@ -415,6 +459,26 @@ func matchProvince(ruleProv, targetProv string) bool {
 	return ruleProv == targetProv
 }
 
+func isCampaignActive(r FreightRule) bool {
+	now := time.Now()
+	if r.CampaignStart != "" {
+		start, err := time.ParseInLocation("2006-01-02", r.CampaignStart, time.Local)
+		if err == nil && now.Before(start) {
+			return false
+		}
+	}
+	if r.CampaignEnd != "" {
+		end, err := time.ParseInLocation("2006-01-02", r.CampaignEnd, time.Local)
+		if err == nil {
+			end = end.Add(24 * time.Hour)
+			if now.After(end) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // ========== RuleIndex: O(1) 规则查找 ==========
 // 为批量计算预建索引，避免每行数据 O(R) 遍历
 
@@ -428,7 +492,7 @@ type RuleIndex struct {
 }
 
 // BuildRuleIndex 预建规则索引（计算开始时调用一次）
-func BuildRuleIndex(allRules []FreightRule, gr *GlobalRule) *RuleIndex {
+func BuildRuleIndex(allRules []FreightRule) *RuleIndex {
 	idx := &RuleIndex{
 		customerRules: make(map[string]map[string]RuleResult),
 		globalRules:   make(map[string]RuleResult),
@@ -497,6 +561,9 @@ func BuildRuleIndex(allRules []FreightRule, gr *GlobalRule) *RuleIndex {
 	// 先通配
 	for _, r := range enabled {
 		if r.RuleType == "campaign" && r.CustomerName != "" {
+			if !isCampaignActive(r) {
+				continue
+			}
 			ensureCustomer(r.CustomerName)
 			custKey := NormalizeCustomerName(r.CustomerName)
 			if r.Province == "" {
@@ -507,6 +574,9 @@ func BuildRuleIndex(allRules []FreightRule, gr *GlobalRule) *RuleIndex {
 	// 再精确省份（覆盖通配）
 	for _, r := range enabled {
 		if r.RuleType == "campaign" && r.CustomerName != "" && r.Province != "" {
+			if !isCampaignActive(r) {
+				continue
+			}
 			ensureCustomer(r.CustomerName)
 			custKey := NormalizeCustomerName(r.CustomerName)
 			provKey := NormalizeProvince(r.Province)

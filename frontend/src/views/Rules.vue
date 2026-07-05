@@ -342,9 +342,16 @@
     </el-dialog>
 
     <!-- 规则编辑弹窗 -->
-    <el-dialog v-model="ruleDlgVisible" :title="editingRule?.id?'编辑规则':'新增规则'" width="700px" destroy-on-close>
-      <el-form :model="ruleForm" label-width="100px" size="default">
+    <el-dialog v-model="ruleDlgVisible" :title="editingRule?.id?'编辑规则':'新增规则'" width="820px" destroy-on-close>
+      <el-form :model="ruleForm" label-width="120px" size="default">
+        <el-alert type="info" :closable="false" title="新增规则时请先选择客户；活动规则需填写活动名称与有效活动日期。" class="rule-form-alert" />
+        <el-divider content-position="left" style="margin: 16px 0 8px;">基础信息</el-divider>
         <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="所属客户">
+              <el-input v-model="ruleForm.customer_name" disabled placeholder="请先选择客户" />
+            </el-form-item>
+          </el-col>
           <el-col :span="12">
             <el-form-item label="规则类型">
               <el-select v-model="ruleForm.rule_type" style="width:100%">
@@ -353,6 +360,8 @@
               </el-select>
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="省份">
               <el-select v-model="ruleForm.province" filterable clearable placeholder="空=全国" style="width:100%">
@@ -360,8 +369,6 @@
               </el-select>
             </el-form-item>
           </el-col>
-        </el-row>
-        <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="定价模式">
               <el-select v-model="ruleForm.calc_mode" style="width:100%">
@@ -370,6 +377,8 @@
               </el-select>
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="续重模式">
               <el-select v-model="ruleForm.cont_mode" style="width:100%">
@@ -379,7 +388,13 @@
               </el-select>
             </el-form-item>
           </el-col>
+          <el-col :span="12">
+            <el-form-item label="首重(kg)">
+              <el-input-number v-model="ruleForm.first_weight" :min="0.01" :step="0.1" :precision="2" style="width:100%" />
+            </el-form-item>
+          </el-col>
         </el-row>
+        <el-divider content-position="left" style="margin: 16px 0 8px;">价格配置</el-divider>
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="首重单价(元)">
@@ -421,13 +436,22 @@
         <template v-if="ruleForm.rule_type==='campaign'">
           <el-row :gutter="16">
             <el-col :span="12">
-              <el-form-item label="活动名称"><el-input v-model="ruleForm.campaign_name" /></el-form-item>
+              <el-form-item label="活动名称"><el-input v-model="ruleForm.campaign_name" placeholder="请输入活动名称" /></el-form-item>
             </el-col>
             <el-col :span="6">
-              <el-form-item label="开始日期"><el-input type="date" v-model="ruleForm.campaign_start" /></el-form-item>
+              <el-form-item label="开始日期">
+                <el-date-picker v-model="ruleForm.campaign_start" type="date" placeholder="开始日期" style="width:100%" />
+              </el-form-item>
             </el-col>
             <el-col :span="6">
-              <el-form-item label="结束日期"><el-input type="date" v-model="ruleForm.campaign_end" /></el-form-item>
+              <el-form-item label="结束日期">
+                <el-date-picker v-model="ruleForm.campaign_end" type="date" placeholder="结束日期" style="width:100%" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row>
+            <el-col :span="24">
+              <el-alert title="结束日期不可早于开始日期；请使用日期选择器确保格式正确。" type="warning" show-icon class="campaign-alert" />
             </el-col>
           </el-row>
         </template>
@@ -534,7 +558,7 @@
         <el-icon size="16" color="#409eff"><HelpFilled /></el-icon>
         <span>拉均重规则用于对平均重量偏高的客户进行加价，重量越重加价越多。</span>
         <ul class="aw-help-list">
-          <li><strong>计算逻辑：</strong>按客户分组计算平均重量，高于基准重量时，超出部分按每公斤单价加价，加价分摊到每个参与计算的包裹。</li>
+          <li><strong class="aw-important">计算逻辑：</strong>按客户分组计算平均重量，高于基准重量时，超出部分按每公斤单价加价，加价分摊到每个参与计算的包裹。</li>
           <li><strong>加价公式：</strong>单件加价 = (平均重量 - 基准重量) × 每公斤加价</li>
           <li><strong>优先级：</strong>客户专属规则 > 全局规则。</li>
           <li><strong>重量上限：</strong>超过设定重量的包裹不参与平均计算，也不会被加价。</li>
@@ -1165,6 +1189,10 @@ function resetRuleForm() {
 }
 
 function openRuleDlg(rule: FreightRule | null) {
+  if (!rule && !activeCustomer.value) {
+    ElMessage.warning('请先选择客户，再新增规则')
+    return
+  }
   if (rule) {
     editingRule.value = rule
     Object.assign(ruleForm, { ...rule })
@@ -1177,15 +1205,46 @@ function openRuleDlg(rule: FreightRule | null) {
 
 async function saveRule() {
   savingRule.value = true
-  try {
-    await store.saveRule({ ...ruleForm })
-    ElMessage.success('保存成功')
-    ruleDlgVisible.value = false
-    // 刷新
-    await loadCustomers()
-    if (activeCustomer.value) loadCustomerRules(activeCustomer.value)
-  } catch { ElMessage.error('保存失败') }
-  finally { savingRule.value = false }
+    try {
+      // 活动规则日期校验：结束日期不能早于开始日期
+      if (ruleForm.rule_type === 'campaign') {
+        const s = ruleForm.campaign_start
+        const e = ruleForm.campaign_end
+        if (!s || !e) {
+          ElMessage.warning('活动规则需填写开始与结束日期')
+          savingRule.value = false
+          return
+        }
+        const sd = new Date(s)
+        const ed = new Date(e)
+        if (isNaN(sd.getTime()) || isNaN(ed.getTime())) {
+          ElMessage.warning('日期格式异常，请使用日期选择器')
+          savingRule.value = false
+          return
+        }
+        if (ed.getTime() < sd.getTime()) {
+          ElMessage.warning('结束日期不能早于开始日期')
+          savingRule.value = false
+          return
+        }
+        // 保持为 YYYY-MM-DD 字符串
+        ruleForm.campaign_start = sd.toISOString().slice(0, 10)
+        ruleForm.campaign_end = ed.toISOString().slice(0, 10)
+      }
+
+      const res = await store.saveRule({ ...ruleForm })
+      if (res && res.ok) {
+        ElMessage.success('保存成功')
+        ruleDlgVisible.value = false
+        await loadCustomers()
+        if (activeCustomer.value) loadCustomerRules(activeCustomer.value)
+      } else {
+        ElMessage.error(res && res.error ? res.error : '保存失败')
+      }
+    } catch (err) {
+      console.error('saveRule error', err)
+      ElMessage.error('保存失败')
+    } finally { savingRule.value = false }
 }
 
 // ====== 区域模板生成 ======
@@ -1574,12 +1633,23 @@ onBeforeUnmount(() => {
 .aw-help-box span { font-size: 13px; color: #606266; }
 .aw-help-list { margin: 0; padding-left: 20px; font-size: 12px; color: #808080; }
 .aw-help-list li { margin-bottom: 4px; line-height: 1.5; }
+.rule-form-alert { margin-bottom: 14px; }
+.campaign-alert { margin-top: 4px; }
+.aw-important { color: #f56c6c; }
+
+/* 规则弹窗防止标签遮挡与换行 */
+.el-dialog__body .el-form-item__label {
+  white-space: normal;
+  padding-right: 8px;
+}
 .aw-form .form-tip {
   font-size: 12px; color: #909399; margin-top: 4px;
 }
 .aw-form .form-unit {
   margin-left: 8px; font-size: 13px; color: #606266;
 }
+.campaign-tip { font-size: 12px; color: #909399; margin: 6px 0 0 0; }
+.campaign-tip strong { color: #f56c6c; }
 .empty-zone {
   display: flex; align-items: center; justify-content: center;
   padding: 40px 0;

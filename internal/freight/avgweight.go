@@ -66,7 +66,11 @@ func calcOneCustomer(customer string, weights []float64, rule *rules.AvgWeightRu
 
 	baseWeight := rule.BaseWeight
 	weightLimit := rule.WeightLimit
+	stepWeight := rule.StepWeight
 	stepPrice := rule.StepPrice
+	if stepWeight <= 0 {
+		stepWeight = 0.1
+	}
 	if stepPrice <= 0 {
 		stepPrice = 0.1
 	}
@@ -112,8 +116,25 @@ func calcOneCustomer(customer string, weights []float64, rule *rules.AvgWeightRu
 	deviation = math.Round(deviation*1000) / 1000
 	result.Deviation = deviation
 
-	// 加价 = 偏差 × 步价（实际重量，不取整）
-	perItem := deviation * stepPrice
+	if deviation <= 0 {
+		return result
+	}
+
+	steps := deviation / stepWeight
+	switch rule.RoundMode {
+	case "floor":
+		steps = math.Floor(steps)
+	case "round":
+		steps = math.Round(steps)
+	default:
+		steps = math.Ceil(steps)
+	}
+	if steps < 0 {
+		steps = 0
+	}
+	result.Steps = int(steps)
+
+	perItem := steps * stepPrice
 	if rule.MaxMarkup > 0 && perItem > rule.MaxMarkup {
 		perItem = rule.MaxMarkup
 	}
@@ -160,7 +181,7 @@ func ApplyAvgWeightToRows(rowData []excel.RowData, avgResults []rules.AvgWeightR
 				continue
 			}
 			rowData[i].AvgWeightMarkup = info.markup
-			rowData[i].Fee = math.Round((rowData[i].Fee + info.markup) * 100) / 100
+			rowData[i].Fee = math.Round((rowData[i].Fee+info.markup)*100) / 100
 		}
 	}
 }

@@ -10,7 +10,7 @@
         <el-select v-model="testForm.customer" filterable placeholder="选择客户" size="default" style="width:180px">
           <el-option v-for="c in customers" :key="c.name" :label="c.name" :value="c.name" />
         </el-select>
-        <el-select v-model="testForm.province" filterable placeholder="选择省份(all=全部)" size="default" style="width:160px">
+        <el-select v-model="testForm.province" filterable placeholder="选择省份(all=全部)" size="default" style="width:180px">
           <el-option label="全部省份" value="all" />
           <el-option v-for="p in PROVINCES" :key="p" :label="p" :value="p" />
         </el-select>
@@ -18,6 +18,26 @@
         <span class="tt-unit">kg</span>
         <el-button type="primary" size="default" @click="runTest" :loading="testing">单次测试</el-button>
         <el-button type="success" size="default" @click="runBatchTest" :loading="testing">批量测试</el-button>
+        <el-button text @click="clearResults">清空结果</el-button>
+      </div>
+    </div>
+
+    <div v-if="testResult || batchTestResults.length > 0" class="test-summary">
+      <div class="summary-item">
+        <span class="summary-label">客户</span>
+        <span class="summary-value">{{ testForm.customer || '未选择' }}</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">省份</span>
+        <span class="summary-value">{{ provinceLabel }}</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">重量</span>
+        <span class="summary-value">{{ formatWeight(testForm.weight) }} kg</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">状态</span>
+        <span class="summary-value" :class="testResult?.rule_id ? 'good' : 'warn'">{{ testResult?.rule_id ? '已命中规则' : (testResult ? '已回退到兜底' : '已完成批量测试') }}</span>
       </div>
     </div>
 
@@ -32,23 +52,26 @@
         <div class="panel-content" v-if="testResult">
           <div class="tr-fee">
             <span class="tr-label">计算运费</span>
-            <span class="tr-value">¥{{ testResult.fee }}</span>
+            <span class="tr-value">¥{{ formatMoney(testResult.fee) }}</span>
+          </div>
+          <div class="tr-note" :class="testResult.rule_id ? 'good' : 'warn'">
+            {{ testResult.rule_id ? ('已命中' + ruleLevelText(testResult.rule_level)) : '当前未命中具体规则，已使用默认/兜底结果' }}
           </div>
           <div class="tr-grid">
             <div class="tr-item"><span class="tr-k">规则级别</span><span class="tr-v">{{ ruleLevelText(testResult.rule_level) }}</span></div>
             <div class="tr-item"><span class="tr-k">计费模式</span><span class="tr-v">{{ testResult.calc_mode === 'bracket' ? '区间计费' : '首重续重' }}</span></div>
             <div class="tr-item"><span class="tr-k">续重模式</span><span class="tr-v">{{ testResult.cont_mode === 'hundred_gram' ? '百克续重' : (testResult.cont_mode === 'actual_weight' ? '实际重量' : '整kg续重') }}</span></div>
             <div class="tr-item" v-if="testResult.zone_name"><span class="tr-k">所属区域</span><span class="tr-v">{{ testResult.zone_name }}</span></div>
-            <div class="tr-item"><span class="tr-k">首重/单价</span><span class="tr-v">{{ testResult.first_weight }}kg / ¥{{ testResult.first_price }}</span></div>
-            <div class="tr-item"><span class="tr-k">续重单价</span><span class="tr-v">¥{{ testResult.cont_price }}</span></div>
-            <div class="tr-item" v-if="testResult.surcharge > 0"><span class="tr-k">偏远附加费</span><span class="tr-v">¥{{ testResult.surcharge }}</span></div>
-            <div class="tr-item" v-if="testResult.province_surcharge > 0"><span class="tr-k">省份加价</span><span class="tr-v">¥{{ testResult.province_surcharge }}</span></div>
-            <div class="tr-item" v-if="testResult.global_markup_fixed > 0"><span class="tr-k">全局固定加价</span><span class="tr-v">¥{{ testResult.global_markup_fixed }}</span></div>
-            <div class="tr-item" v-if="testResult.global_markup_percent > 0"><span class="tr-k">全局百分比加价</span><span class="tr-v">{{ testResult.global_markup_percent }}%</span></div>
-            <div class="tr-item" v-if="testResult.min_fee > 0"><span class="tr-k">保底价</span><span class="tr-v">¥{{ testResult.min_fee }}</span></div>
-            <div class="tr-item" v-if="testResult.max_fee > 0"><span class="tr-k">最高价</span><span class="tr-v">¥{{ testResult.max_fee }}</span></div>
-            <div class="tr-item"><span class="tr-k">原始运费</span><span class="tr-v">¥{{ testResult.raw_fee }}</span></div>
-            <div class="tr-item" v-if="testResult.markup > 0"><span class="tr-k">加价合计</span><span class="tr-v">¥{{ testResult.markup }}</span></div>
+            <div class="tr-item"><span class="tr-k">首重/单价</span><span class="tr-v">{{ formatWeight(testResult.first_weight) }}kg / ¥{{ formatMoney(testResult.first_price) }}</span></div>
+            <div class="tr-item"><span class="tr-k">续重单价</span><span class="tr-v">¥{{ formatMoney(testResult.cont_price) }}</span></div>
+            <div class="tr-item" v-if="hasValue(testResult.surcharge)"><span class="tr-k">偏远附加费</span><span class="tr-v">¥{{ formatMoney(testResult.surcharge) }}</span></div>
+            <div class="tr-item" v-if="hasValue(testResult.province_surcharge)"><span class="tr-k">省份加价</span><span class="tr-v">¥{{ formatMoney(testResult.province_surcharge) }}</span></div>
+            <div class="tr-item" v-if="hasValue(testResult.global_markup_fixed)"><span class="tr-k">全局固定加价</span><span class="tr-v">¥{{ formatMoney(testResult.global_markup_fixed) }}</span></div>
+            <div class="tr-item" v-if="hasValue(testResult.global_markup_percent)"><span class="tr-k">全局百分比加价</span><span class="tr-v">{{ formatNumber(testResult.global_markup_percent) }}%</span></div>
+            <div class="tr-item" v-if="hasValue(testResult.min_fee)"><span class="tr-k">保底价</span><span class="tr-v">¥{{ formatMoney(testResult.min_fee) }}</span></div>
+            <div class="tr-item" v-if="hasValue(testResult.max_fee)"><span class="tr-k">最高价</span><span class="tr-v">¥{{ formatMoney(testResult.max_fee) }}</span></div>
+            <div class="tr-item"><span class="tr-k">原始运费</span><span class="tr-v">¥{{ formatMoney(testResult.raw_fee) }}</span></div>
+            <div class="tr-item" v-if="hasValue(testResult.markup)"><span class="tr-k">加价合计</span><span class="tr-v">¥{{ formatMoney(testResult.markup) }}</span></div>
             <div v-if="testResult.avg_weight_rule" class="tr-item tr-aw">
               <span class="tr-k">拉均重规则</span>
               <span class="tr-v">
@@ -66,9 +89,16 @@
           <div v-if="testResult.brackets && testResult.brackets.length > 0" class="tr-brackets">
             <div class="tr-b-header">区间价格明细</div>
             <div v-for="(b, i) in testResult.brackets" :key="i" class="tr-b-item">
-              <span class="tr-b-range">{{ b.weight_from }}-{{ b.weight_to }}kg</span>
-              <span v-if="b.calc_type === 'fixed'" class="tr-b-price">¥{{ b.fixed_price }}</span>
-              <span v-else class="tr-b-price">首重{{ b.first_weight }}kg ¥{{ b.first_price }} + 续重¥{{ b.cont_price }}/{{ b.cont_mode === 'hundred_gram' ? '百克' : 'kg' }}</span>
+              <span class="tr-b-range">{{ formatBracketRange(b) }}</span>
+              <span v-if="b.calc_type === 'fixed'" class="tr-b-price">¥{{ formatMoney(b.fixed_price) }}</span>
+              <span v-else class="tr-b-price">首重{{ formatWeight(b.first_weight) }}kg ¥{{ formatMoney(b.first_price) }} + 续重¥{{ formatMoney(b.cont_price) }}/{{ b.cont_mode === 'hundred_gram' ? '百克' : 'kg' }}</span>
+            </div>
+          </div>
+          <div v-else-if="testResult.calc_mode === 'bracket'" class="tr-brackets">
+            <div class="tr-b-header">区间价格明细</div>
+            <div class="tr-b-item">
+              <span class="tr-b-range">未返回区间明细</span>
+              <span class="tr-b-price">请检查规则配置</span>
             </div>
           </div>
         </div>
@@ -118,14 +148,14 @@
               </template>
             </el-table-column>
             <el-table-column prop="raw_fee" label="原始运费" width="90" align="center">
-              <template #default="{row}">¥{{ (row.raw_fee || 0).toFixed(2) }}</template>
+              <template #default="{row}">¥{{ formatMoney(row.raw_fee) }}</template>
             </el-table-column>
             <el-table-column prop="markup" label="加价" width="80" align="center">
-              <template #default="{row}">{{ row.markup > 0 ? '¥' + row.markup.toFixed(2) : '—' }}</template>
+              <template #default="{row}">{{ hasValue(row.markup) ? '¥' + formatMoney(row.markup) : '—' }}</template>
             </el-table-column>
             <el-table-column prop="fee" label="最终运费" width="100" align="center" fixed="right">
               <template #default="{row}">
-                <span class="fee-final">¥{{ row.fee.toFixed(2) }}</span>
+                <span class="fee-final">¥{{ formatMoney(row.fee) }}</span>
               </template>
             </el-table-column>
           </el-table>
@@ -149,22 +179,26 @@ const store = useAppStore()
 
 const customers = ref<CustomerInfo[]>([])
 const testing = ref(false)
-const testForm = reactive({ customer: '', province: '', weight: 1 })
+const testForm = reactive({ customer: '', province: 'all', weight: 1 })
 const testResult = ref<any>(null)
 const batchTestResults = ref<any[]>([])
 
+const provinceLabel = computed(() => {
+  if (!testForm.province || testForm.province === 'all') return '全部省份'
+  return testForm.province
+})
 const batchAvgFee = computed(() => {
   if (!batchTestResults.value.length) return '0.00'
-  const sum = batchTestResults.value.reduce((s, r) => s + (r.fee || 0), 0)
+  const sum = batchTestResults.value.reduce((s, r) => s + (Number(r.fee) || 0), 0)
   return (sum / batchTestResults.value.length).toFixed(2)
 })
 const batchMaxFee = computed(() => {
   if (!batchTestResults.value.length) return '0.00'
-  return Math.max(...batchTestResults.value.map(r => r.fee || 0)).toFixed(2)
+  return Math.max(...batchTestResults.value.map(r => Number(r.fee) || 0)).toFixed(2)
 })
 const batchMinFee = computed(() => {
   if (!batchTestResults.value.length) return '0.00'
-  return Math.min(...batchTestResults.value.map(r => r.fee || 0)).toFixed(2)
+  return Math.min(...batchTestResults.value.map(r => Number(r.fee) || 0)).toFixed(2)
 })
 
 async function loadCustomers() {
@@ -179,9 +213,39 @@ async function loadCustomers() {
   }
 }
 
+function hasValue(value: unknown) {
+  return value !== null && value !== undefined && value !== '' && value !== 0
+}
+
+function formatMoney(value: number | string | null | undefined) {
+  const num = Number(value)
+  return Number.isFinite(num) ? num.toFixed(2) : '0.00'
+}
+
+function formatWeight(value: number | string | null | undefined) {
+  const num = Number(value)
+  return Number.isFinite(num) ? num.toFixed(2) : '0.00'
+}
+
+function formatNumber(value: number | string | null | undefined) {
+  const num = Number(value)
+  return Number.isFinite(num) ? num.toFixed(2) : '0.00'
+}
+
+function formatBracketRange(bracket: any) {
+  const from = formatWeight(bracket?.weight_from)
+  const to = bracket?.weight_to > 0 ? formatWeight(bracket.weight_to) : '∞'
+  return `${from}-${to}kg`
+}
+
+function clearResults() {
+  testResult.value = null
+  batchTestResults.value = []
+}
+
 async function runTest() {
-  if (!testForm.customer || !testForm.province || !testForm.weight) {
-    ElMessage.warning('请填写客户、省份和重量')
+  if (!testForm.customer || !testForm.weight) {
+    ElMessage.warning('请填写客户和重量')
     return
   }
   testing.value = true
@@ -272,6 +336,15 @@ onMounted(() => {
 .tt-unit { font-size: 13px; color: #909399; }
 
 /* 结果区域 */
+.test-summary {
+  display: flex; gap: 12px; flex-wrap: wrap; padding: 14px 16px; background: #fff;
+  border-radius: 10px; border: 1px solid #e4e7ed; box-shadow: 0 1px 4px rgba(0,0,0,.04);
+}
+.summary-item { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+.summary-label { font-size: 12px; color: #909399; }
+.summary-value { font-size: 14px; color: #303133; font-weight: 600; }
+.summary-value.good { color: #67c23a; }
+.summary-value.warn { color: #e6a23c; }
 .test-body {
   display: flex; gap: 16px; flex: 1; min-height: 0;
 }
@@ -310,6 +383,9 @@ onMounted(() => {
 }
 .tr-label { font-size: 14px; color: #606266; }
 .tr-value { font-size: 32px; font-weight: 700; color: #f56c6c; }
+.tr-note { margin-bottom: 12px; padding: 8px 10px; border-radius: 6px; background: #f5f7fa; font-size: 13px; }
+.tr-note.good { color: #67c23a; background: #f0f9eb; }
+.tr-note.warn { color: #e6a23c; background: #fdf6ec; }
 .tr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .tr-item { display: flex; flex-direction: column; gap: 3px; }
 .tr-aw { grid-column: 1 / -1; }

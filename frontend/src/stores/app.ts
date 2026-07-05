@@ -194,8 +194,15 @@ export const useAppStore = defineStore('app', () => {
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(rule),
     })
+    const data = await res.json()
+    // 如果后端返回的 id 为 0 或未包含 id，则视为失败（后端可能返回 0 表示保存被拒绝）
+    if (!data || !data.id || Number(data.id) === 0) {
+      // 刷新规则以保持界面一致
+      await fetchRules()
+      return { ok: false, error: data && data.error ? data.error : '保存失败' }
+    }
     await fetchRules()
-    return await res.json()
+    return { ok: true, id: data.id }
   }
 
   async function deleteRule(id: number) {
